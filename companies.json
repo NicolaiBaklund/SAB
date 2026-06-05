@@ -1,0 +1,38 @@
+[
+  {
+    "ticker": "MOWI",
+    "name": "Mowi ASA",
+    "keywords": ["Mowi", "MOWI", "Marine Harvest"],
+    "active": true
+  },
+  {
+    "ticker": "SALM",
+    "name": "SalMar ASA",
+    "keywords": ["SalMar", "SALM"],
+    "active": true
+  },
+  {
+    "ticker": "LSG",
+    "name": "Lerøy Seafood Group ASA",
+    "keywords": ["Lerøy", "Leroy", "LSG", "Lerøy Seafood"],
+    "active": true
+  },
+  {
+    "ticker": "GSF",
+    "name": "Grieg Seafood ASA",
+    "keywords": ["Grieg Seafood", "GSF", "Grieg"],
+    "active": true
+  },
+  {
+    "ticker": "BAKKA",
+    "name": "Bakkafrost P/F",
+    "keywords": ["Bakkafrost", "BAKKA"],
+    "active": true
+  },
+  {
+    "ticker": "AUSS",
+    "name": "Austevoll Seafood ASA",
+    "keywords": ["Austevoll", "AUSS", "Austevoll Seafood"],
+    "active": true
+  }
+]

@@ -36,9 +36,10 @@ Data Sources → Scraper → SQLite DB → NLP Scorer → Signal Generator
 SAB/
   companies.json        — company registry (ticker, name, keywords, active)
   src/
+    config.py           — load_companies() / get_active_companies() with validation
     data/
-      db.py             — SQLite setup and queries
-      newsweb.py        — Playwright scraper for Oslo Børs
+      db.py             — SQLite setup and queries (Phase 1.2)
+      newsweb.py        — Playwright scraper for Oslo Børs (Phase 1.3)
       rss.py            — RSS scraper for news sites (Phase 1.5)
     nlp/
       scorer.py         — IDUN API calls and scoring logic (Phase 2)

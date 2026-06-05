@@ -8,21 +8,23 @@ Build a sentiment analysis pipeline for Norwegian salmon/aquaculture companies l
 
 - Python venv, pytest wired up
 - `.env` with IDUN API key (`https://llm.hpc.ntnu.no`, OpenAI-compatible)
+- `companies.json` — 6 Oslo Børs salmon companies with tickers, names, keywords, active flag
+- `src/config.py` — `load_companies()` and `get_active_companies()` with field validation
 - No data pipeline, no models, no signals yet
 
 ## Companies (initial scope)
 
 Salmon/aquaculture sector, Oslo Børs listed:
 
-| Ticker | Company          | Active |
-|--------|-----------------|--------|
-| MOWI   | Mowi ASA        | yes    |
-| SALM   | SalMar ASA      | yes    |
-| LSG    | Lerøy Seafood   | yes    |
-| GSF    | Grieg Seafood   | yes    |
-| BAKKA  | Bakkafrost      | yes    |
-| AUSS   | Austevoll       | yes    |
-| NRS    | Norway Royal Salmon | yes |
+| Ticker | Company                  | Active |
+|--------|--------------------------|--------|
+| MOWI   | Mowi ASA                 | yes    |
+| SALM   | SalMar ASA               | yes    |
+| LSG    | Lerøy Seafood Group ASA  | yes    |
+| GSF    | Grieg Seafood ASA        | yes    |
+| BAKKA  | Bakkafrost P/F           | yes    |
+| AUSS   | Austevoll Seafood ASA    | yes    |
+
 
 System is dynamic: companies defined in `companies.json`. Add/remove without code changes.
 
@@ -50,7 +52,7 @@ System is dynamic: companies defined in `companies.json`. Add/remove without cod
 
 | Phase | Description | Status |
 |-------|-------------|--------|
-| 1.1 | Company config (`companies.json`) | not started |
+| 1.1 | Company config (`companies.json`) | done |
 | 1.2 | SQLite schema + DB setup | not started |
 | 1.3 | Newsweb (Oslo Børs) Playwright scraper | not started |
 | 1.4 | Daily scheduler / dedup | not started |
