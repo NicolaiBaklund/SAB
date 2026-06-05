@@ -26,7 +26,7 @@ Salmon/aquaculture sector, Oslo Børs listed:
 
 System is dynamic: companies defined in `companies.json`. Add/remove without code changes.
 
-## Timescope
+## Time Scope
 
 - **Initial fetch:** 90 days lookback
 - **Ongoing:** daily incremental fetch (new articles only, dedup by URL)
