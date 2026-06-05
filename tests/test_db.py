@@ -1,8 +1,8 @@
 import pytest
 import pytest_asyncio
 from datetime import datetime, timezone
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy import select
 
 from src.data.models import Base, Article, Sentiment
 
@@ -12,6 +12,13 @@ IN_MEMORY = "sqlite+aiosqlite:///:memory:"
 @pytest_asyncio.fixture
 async def session():
     engine = create_async_engine(IN_MEMORY)
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     factory = async_sessionmaker(engine, expire_on_commit=False)
@@ -93,6 +100,21 @@ async def test_insert_sentiment(session: AsyncSession):
     assert len(rows) == 1
     assert rows[0].score == 0.75
     assert rows[0].label == "positive"
+
+
+@pytest.mark.asyncio
+async def test_sentiment_orphan_rejected(session: AsyncSession):
+    # FK constraint must reject a sentiment row pointing at a non-existent article.
+    sentiment = Sentiment(
+        article_id=99999,
+        score=0.5,
+        label="positive",
+        model="norw-ai-magistral-24b",
+        scored_at=_now(),
+    )
+    session.add(sentiment)
+    with pytest.raises(Exception):
+        await session.commit()
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,26 @@
 from contextlib import asynccontextmanager
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from src.settings import get_settings
 from src.data.models import Base
 
 
+def _enable_sqlite_fk(engine) -> None:
+    """SQLite ignores FK constraints unless PRAGMA foreign_keys=ON per connection."""
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_pragma(dbapi_connection, connection_record):
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+
 def _make_engine():
     settings = get_settings()
-    return create_async_engine(settings.DATABASE_URL, echo=False)
+    engine = create_async_engine(settings.DATABASE_URL, echo=False)
+    if settings.DATABASE_URL.startswith("sqlite"):
+        _enable_sqlite_fk(engine)
+    return engine
 
 
 async def init_db() -> None:
