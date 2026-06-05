@@ -1,18 +1,36 @@
 # Data Sources
 
-## Newsweb (Oslo Børs) — Phase 1.3
+## Newsweb (Oslo Børs) — Phase 1.3 / 1.4
 
 **What it is:** Official regulated announcements (børsmeldinger) from Oslo Børs.  
 **Why priority:** Earnings, profit warnings, insider trades — highest market impact.  
-**Scraper:** Playwright (headless browser) — site is JS-rendered SPA, no API or RSS available.  
-**URL:** https://newsweb.oslobors.no  
-**Filter:** By ticker symbol (e.g. MOWI, SALM)  
+**Scraper:** `httpx` against the JSON API the Newsweb SPA itself calls — **no headless browser**.  
+**Public site:** https://newsweb.oslobors.no (JS-rendered SPA, empty without JS)  
+**API base:** `https://api3.oslo.oslobors.no/v1/newsreader`  
+**Filter:** By numeric `issuer` id (stored per company as `newsweb_issuer_id` in `companies.json`)  
 **Language:** Norwegian + some English  
 
-**Gotchas:**
-- JS-rendered — raw HTTP fetch returns empty page
-- Ticker format TBD (verify MOWI vs MOWI.OL on the site)
-- May require scroll/pagination for historical data
+### Why not Playwright
+
+The site is a JS-rendered SPA, but it is backed by an undocumented-but-public JSON
+API (the same data the public website renders). Calling it directly with `httpx`
+is simpler, faster and far less brittle than driving a headless browser, so
+Playwright was dropped before implementation.
+
+### Endpoints (verified)
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /list?issuer=<id>&fromDate=YYYY-MM-DD&toDate=YYYY-MM-DD` | `data.messages[]` (id, title, `issuerSign`, `publishedTime`, `numbAttachments`, …) + `data.overflow` bool |
+| `GET /message?messageId=<id>` | `data.message` with plain-text `body` and `attachments[] {id, name}` |
+| `GET /attachment?messageId=<id>&attachmentId=<aid>` | raw attachment bytes (usually PDF) |
+
+### Behaviour
+
+- **Filtering:** the `issuer` filter is the numeric issuer id, *not* the ticker string. Each company's id lives in `companies.json` (see `setup.md` for how to look up a new one).
+- **Pagination:** the list endpoint has no offset/page param; it returns one batch and sets `overflow: true` when more rows exist. The scraper paginates by **bisecting the date range** on overflow. Per-issuer quarterly windows are small, so this almost never fires.
+- **Body + attachments:** the article `body` is the message body followed by each attachment converted to Markdown (`markitdown`) under a `## Attachment: <name>` header — folded into the single `body` column (no separate attachments table).
+- **Dedup:** by article URL (`https://newsweb.oslobors.no/message/<messageId>`), so overlapping/incremental runs are safe to re-run.
 
 ---
 
