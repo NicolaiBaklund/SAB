@@ -1,1 +1,7 @@
 pytest
+pytest-asyncio
+sqlalchemy
+aiosqlite
+alembic
+pydantic-settings
+python-dotenv

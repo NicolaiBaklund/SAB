@@ -7,10 +7,15 @@ Build a sentiment analysis pipeline for Norwegian salmon/aquaculture companies l
 ## What exists today
 
 - Python venv, pytest wired up
-- `.env` with IDUN API key (`https://llm.hpc.ntnu.no`, OpenAI-compatible)
+- `.env.local` with IDUN API key and DATABASE_URL; `.env.production` template; env-file detection via `ENVIRONMENT` var
 - `companies.json` — 6 Oslo Børs salmon companies with tickers, names, keywords, active flag
 - `src/config.py` — `load_companies()` and `get_active_companies()` with field validation
-- No data pipeline, no models, no signals yet
+- `src/settings.py` — pydantic-settings `Settings` class with `get_settings()`
+- `src/data/models.py` — SQLAlchemy ORM: `Article` + `Sentiment` tables
+- `src/data/db.py` — async engine, `init_db()`, `get_db()` context manager
+- `alembic/` — migration tooling; initial migration creates both tables
+- `data/` — SQLite DB lives here (gitignored, created by `alembic upgrade head`)
+- No data pipeline, no scrapers, no signals yet
 
 ## Companies (initial scope)
 
@@ -53,7 +58,7 @@ System is dynamic: companies defined in `companies.json`. Add/remove without cod
 | Phase | Description | Status |
 |-------|-------------|--------|
 | 1.1 | Company config (`companies.json`) | done |
-| 1.2 | SQLite schema + DB setup | not started |
+| 1.2 | SQLite schema + DB setup | done |
 | 1.3 | Newsweb (Oslo Børs) Playwright scraper | not started |
 | 1.4 | Daily scheduler / dedup | not started |
 | 1.5 | News RSS scraper (E24, DN, Intrafish via RSS feeds) | not started |
