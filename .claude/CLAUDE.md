@@ -63,5 +63,3 @@ After completing a phase, feature, or meaningful chunk of work, update `roadmap.
 - If a phase is partially done, note what's finished and what remains.
 
 The roadmap is the single source of truth for project status. If it's stale, no one (including the AI) knows where the project stands.
-
-7. You are allowed to, and should do, commits while working. 
