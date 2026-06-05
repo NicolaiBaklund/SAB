@@ -1,4 +1,4 @@
-name: Pytest
+name: pytest
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  pytest:
     runs-on: ubuntu-latest
 
     steps:
