@@ -43,11 +43,9 @@ def test_nrs_not_present():
     assert "NRS" not in tickers
 
 
-def test_missing_field_raises():
+def test_missing_field_raises(tmp_path):
     bad = [{"ticker": "TST", "name": "Test Co", "active": True}]  # missing keywords
+    bad_file = tmp_path / "bad_companies.json"
+    bad_file.write_text(json.dumps(bad))
     with pytest.raises(ValueError, match="missing fields"):
-        from src.config import _REQUIRED_FIELDS
-        for company in bad:
-            missing = _REQUIRED_FIELDS - company.keys()
-            if missing:
-                raise ValueError(f"Company entry missing fields {missing}: {company}")
+        load_companies(bad_file)
