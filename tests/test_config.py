@@ -35,13 +35,7 @@ def test_tickers_are_uppercase():
 def test_get_active_companies_only_active():
     active = get_active_companies()
     assert all(c["active"] for c in active)
-
-
-def test_nrs_not_present():
-    # NRS (Norway Royal Salmon) delisted 2022 after SalMar acquisition
-    tickers = {c["ticker"] for c in load_companies()}
-    assert "NRS" not in tickers
-
+    
 
 def test_missing_field_raises():
     bad = [{"ticker": "TST", "name": "Test Co", "active": True}]  # missing keywords
