@@ -95,7 +95,7 @@ scored_at   DATETIME
 
 | Layer | Choice | Reason |
 |-------|--------|--------|
-| Language | Python 3.x | user preference |
+|| Language | Python 3.10+ | user preference |
 | Storage | SQLite | zero ops, enough for this scale |
 | HTTP | `httpx` | async-capable |
 | Scraping | `playwright` | headless browser needed for JS-rendered Newsweb |
