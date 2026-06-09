@@ -5,7 +5,7 @@ from datetime import date, datetime
 from typing import AsyncIterator, Literal
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -114,6 +114,21 @@ def _article_payload(rows: list[Article], model: str | None) -> dict[str, object
     }
 
 
+def _apply_sql_filters(stmt, filters: ReviewFilters):
+    """Apply SQL-eligible filter conditions (ticker, source, published, q)."""
+    if filters.ticker:
+        stmt = stmt.where(Article.ticker == filters.ticker)
+    if filters.source:
+        stmt = stmt.where(Article.source == filters.source)
+    if filters.published_from:
+        stmt = stmt.where(func.date(Article.published) >= filters.published_from)
+    if filters.published_to:
+        stmt = stmt.where(func.date(Article.published) <= filters.published_to)
+    if filters.q:
+        stmt = stmt.where(func.lower(Article.title).like(f"%{filters.q.lower()}%"))
+    return stmt
+
+
 async def list_review_articles(
     session: AsyncSession,
     filters: ReviewFilters | None = None,
@@ -125,44 +140,78 @@ async def list_review_articles(
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
 
-    result = await session.execute(
-        select(Article).options(selectinload(Article.sentiment)).order_by(Article.id)
+    # Step 1: Paginate over URL groups in SQL.
+    # SQLite places NULLs last in DESC order, so articles with no published date
+    # sort after dated ones without an explicit NULLS LAST clause.
+    url_page_stmt = _apply_sql_filters(
+        select(Article.url)
+        .group_by(Article.url)
+        .order_by(
+            func.max(Article.published).desc(),
+            func.max(Article.fetched_at).desc(),
+        )
+        .limit(limit)
+        .offset(offset),
+        filters,
     )
-    articles = list(result.scalars().all())
-
-    matching_urls = {
-        article.url for article in articles if _matches_filters(article, filters)
-    }
-    grouped: dict[str, list[Article]] = {
-        url: [article for article in articles if article.url == url]
-        for url in matching_urls
-    }
-
-    ordered_groups = sorted(
-        grouped.values(),
-        key=_article_sort_values,
-        reverse=True,
+    total_stmt = _apply_sql_filters(
+        select(func.count(distinct(Article.url))),
+        filters,
     )
-    page = ordered_groups[offset : offset + limit]
 
-    return {
-        "items": [_article_payload(rows, filters.model) for rows in page],
-        "total": len(ordered_groups),
-        "limit": limit,
-        "offset": offset,
-    }
+    url_result = await session.execute(url_page_stmt)
+    total_result = await session.execute(total_stmt)
+    page_urls = [row[0] for row in url_result]
+    total = total_result.scalar() or 0
+
+    if not page_urls:
+        return {"items": [], "total": total, "limit": limit, "offset": offset}
+
+    # Step 2: Load all rows for the page URLs (all tickers per article, not just
+    # the filtered ticker) together with their sentiments.
+    articles_result = await session.execute(
+        select(Article)
+        .where(Article.url.in_(page_urls))
+        .options(selectinload(Article.sentiment))
+    )
+    by_url: dict[str, list[Article]] = {}
+    for article in articles_result.scalars().all():
+        by_url.setdefault(article.url, []).append(article)
+
+    # Step 3: Apply Python-only filters (label, score_state require loaded sentiments).
+    # SQL total counts URLs matching the SQL filters; pages may be shorter when
+    # sentiment filters further reduce results.
+    has_python_filters = bool(filters.label or filters.score_state)
+    items = []
+    for url in page_urls:
+        rows = by_url.get(url, [])
+        if not rows:
+            continue
+        if has_python_filters and not any(_matches_filters(a, filters) for a in rows):
+            continue
+        items.append(_article_payload(rows, filters.model))
+
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 async def get_review_filter_options(session: AsyncSession) -> dict[str, list[str]]:
-    article_result = await session.execute(select(Article))
-    sentiment_result = await session.execute(select(Sentiment))
-    articles = list(article_result.scalars().all())
-    sentiments = list(sentiment_result.scalars().all())
+    tickers_result = await session.execute(
+        select(distinct(Article.ticker)).order_by(Article.ticker)
+    )
+    sources_result = await session.execute(
+        select(distinct(Article.source)).order_by(Article.source)
+    )
+    labels_result = await session.execute(
+        select(distinct(Sentiment.label)).order_by(Sentiment.label)
+    )
+    models_result = await session.execute(
+        select(distinct(Sentiment.model)).order_by(Sentiment.model)
+    )
     return {
-        "tickers": sorted({article.ticker for article in articles}),
-        "sources": sorted({article.source for article in articles}),
-        "labels": sorted({sentiment.label for sentiment in sentiments}),
-        "models": sorted({sentiment.model for sentiment in sentiments}),
+        "tickers": [row[0] for row in tickers_result],
+        "sources": [row[0] for row in sources_result],
+        "labels": [row[0] for row in labels_result],
+        "models": [row[0] for row in models_result],
     }
 
 
