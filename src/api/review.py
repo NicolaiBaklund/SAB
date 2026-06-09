@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Literal
+from typing import AsyncIterator, Literal
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,6 +15,11 @@ from src.data.models import Article, Sentiment
 ScoreState = Literal["scored", "unscored"]
 
 router = APIRouter(prefix="/api/review", tags=["review"])
+
+
+async def get_session() -> AsyncIterator[AsyncSession]:
+    async with get_db() as session:
+        yield session
 
 
 @dataclass(frozen=True)
@@ -173,6 +178,7 @@ async def articles(
     published_from: date | None = None,
     published_to: date | None = None,
     q: str | None = None,
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, object]:
     filters = ReviewFilters(
         ticker=ticker,
@@ -184,12 +190,11 @@ async def articles(
         published_to=published_to,
         q=q,
     )
-    async with get_db() as session:
-        return await list_review_articles(session, filters, limit=limit, offset=offset)
+    return await list_review_articles(session, filters, limit=limit, offset=offset)
 
 
 @router.get("/filter-options")
-async def filter_options() -> dict[str, list[str]]:
-    async with get_db() as session:
-        return await get_review_filter_options(session)
-
+async def filter_options(
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, list[str]]:
+    return await get_review_filter_options(session)

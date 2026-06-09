@@ -5,7 +5,7 @@ import type { ReviewCompany, SentimentLabel } from "../types";
 
 function company(label: SentimentLabel | null, score = 0.62): ReviewCompany {
   return {
-    article_id: Math.floor(Math.random() * 10000),
+    article_id: 1,
     ticker: "MOWI",
     sentiment: label
       ? {
@@ -49,4 +49,3 @@ describe("SentimentBubble", () => {
     expect(container.firstElementChild).toHaveClass("sentiment-bubble--unscored");
   });
 });
-

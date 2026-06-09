@@ -118,10 +118,11 @@ export function ReviewPage() {
     setOffset(0);
   }
 
-  const pageStart = data.total === 0 ? 0 : data.offset + 1;
-  const pageEnd = Math.min(data.offset + data.limit, data.total);
-  const canGoBack = data.offset > 0;
-  const canGoNext = data.offset + data.limit < data.total;
+  const pageLimit = data.limit || PAGE_SIZE;
+  const pageStart = data.total === 0 ? 0 : offset + 1;
+  const pageEnd = Math.min(offset + pageLimit, data.total);
+  const canGoBack = offset > 0;
+  const canGoNext = offset + pageLimit < data.total;
   const pagination = (
     <PaginationControls
       loading={loading}

@@ -46,10 +46,45 @@ export function buildReviewQuery(
   return params.toString();
 }
 
+function formatErrorDetail(detail: unknown): string {
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (item && typeof item === "object" && "msg" in item) {
+          return String(item.msg);
+        }
+        return JSON.stringify(item);
+      })
+      .filter(Boolean)
+      .join("; ");
+  }
+  if (detail && typeof detail === "object") {
+    return JSON.stringify(detail);
+  }
+  return "";
+}
+
+export function formatRequestError(status: number, body: unknown): string {
+  const detail =
+    body && typeof body === "object" && "detail" in body
+      ? formatErrorDetail(body.detail)
+      : "";
+  return detail ? `Request failed: ${status}: ${detail}` : `Request failed: ${status}`;
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Request failed: ${response.status}`);
+    let body: unknown = null;
+    try {
+      body = await response.json();
+    } catch {
+      body = null;
+    }
+    throw new Error(formatRequestError(response.status, body));
   }
   return response.json() as Promise<T>;
 }
@@ -65,4 +100,3 @@ export async function fetchReviewArticles(
 export async function fetchFilterOptions(): Promise<FilterOptions> {
   return getJson<FilterOptions>(`${API_ROOT}/filter-options`);
 }
-

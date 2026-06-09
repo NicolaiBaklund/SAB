@@ -1,4 +1,4 @@
-import { buildReviewQuery, defaultFilters } from "./review";
+import { buildReviewQuery, defaultFilters, formatRequestError } from "./review";
 
 describe("buildReviewQuery", () => {
   it("includes pagination and omits empty filters", () => {
@@ -34,3 +34,14 @@ describe("buildReviewQuery", () => {
   });
 });
 
+describe("formatRequestError", () => {
+  it("includes FastAPI validation detail messages when present", () => {
+    const message = formatRequestError(422, {
+      detail: [{ msg: "Input should be greater than or equal to 1" }],
+    });
+
+    expect(message).toBe(
+      "Request failed: 422: Input should be greater than or equal to 1",
+    );
+  });
+});
