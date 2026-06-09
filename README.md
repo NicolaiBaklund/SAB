@@ -8,7 +8,8 @@
 
 SAB is a **Sentiment Analysis Bot** for Norwegian stock research. It collects
 company news, stores article text in SQLite, exposes a review dashboard, and is
-being built toward company-level sentiment scoring and signal generation.
+being built toward company-level sentiment scoring, financial analysis, and signal
+generation.
 
 ![SAB pipeline overview](docs/assets/readme-overview.svg)
 
@@ -43,7 +44,8 @@ SAB currently has the data foundation and first dashboard view in place.
 | Incremental fetch workflow | Done |
 | Read-only article review dashboard | Done |
 | IDUN sentiment scoring | Planned |
-| Price data and correlation | Planned |
+| Financial analysis baseline | Planned |
+| Price data and sentiment correlation | Planned |
 | Trading signal generation | Planned |
 
 ## Quick Start
@@ -135,15 +137,25 @@ npm run build
    - Score sentiment per company/ticker, not per article as a whole.
    - Store `score`, `label`, `model`, and `scored_at` in the `sentiment` table.
 
-3. **Add aggregation and price context**
+3. **Add financial analysis as the signal baseline**
+   - Add company-level financial metrics such as price history, returns,
+     volatility, volume, valuation multiples, earnings dates, and sector-specific
+     indicators where available.
+   - Keep this layer useful without sentiment, so sentiment can be evaluated as
+     an incremental signal rather than the whole strategy.
+   - Build reusable data models and API shapes for time series, fundamentals, and
+     derived indicators.
+
+4. **Add sentiment aggregation and market context**
    - Aggregate sentiment per ticker over a rolling window.
    - Add price data from Yahoo Finance or Euronext.
-   - Compare sentiment moves with price moves and lag windows.
+   - Compare sentiment moves with price moves, financial baselines, and lag
+     windows.
 
-4. **Generate signals and expand dashboard views**
+5. **Generate signals and expand dashboard views**
    - Add sentiment-over-time charts.
    - Add price overlays.
-   - Add signal and projection views beside the review page.
+   - Add financial-analysis, signal, and projection views beside the review page.
 
 ## Repository Map
 
