@@ -3,11 +3,19 @@
 ## Requirements
 
 - Python 3.10+
+- Node.js 20+ for the dashboard frontend
 
 ## Install
 
 ```bash
 pip install -r requirements.txt
+```
+
+Install dashboard frontend dependencies separately:
+
+```bash
+cd frontend
+npm install
 ```
 
 The Newsweb scraper uses `markitdown` (with the `[pdf]` extra) to convert PDF
@@ -16,7 +24,7 @@ needed; the scraper talks to the Newsweb JSON API directly with `httpx`.
 
 ## Environment Variables
 
-Create `.env` in project root:
+Create `.env.local` in project root:
 
 ```
 IDUN_KEY=sk-...
@@ -55,6 +63,24 @@ For RSS, `--incremental` and `--backfill` do the same fetch — a feed only expo
 its current window, so there is no historical backfill; both flags exist for cron
 parity. Deduplication (URL for Newsweb, `(ticker, url)` for RSS) makes both safe
 to run repeatedly.
+
+## Dashboard
+
+Run the read-only API from the repository root:
+
+```bash
+uvicorn src.api.main:app --reload
+```
+
+Run the React/Vite frontend in another terminal:
+
+```bash
+cd frontend
+npm run dev
+```
+
+Open `http://localhost:5173/review`. Vite proxies `/api` requests to
+`http://127.0.0.1:8000`.
 
 ### Scheduling
 
