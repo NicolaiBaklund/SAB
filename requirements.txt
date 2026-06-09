@@ -5,3 +5,5 @@ aiosqlite
 alembic
 pydantic-settings
 python-dotenv
+httpx
+markitdown[pdf]

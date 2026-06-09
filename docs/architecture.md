@@ -9,7 +9,7 @@ Data Sources → Scraper → SQLite DB → NLP Scorer → Signal Generator
 ## Components
 
 ### Data Layer
-- **Newsweb scraper** (Playwright) — official Oslo Børs announcements per ticker
+- **Newsweb scraper** (`httpx` + Newsweb JSON API) — official Oslo Børs announcements per issuer; PDF attachments converted to Markdown via `markitdown`
 - **News RSS scraper** — E24, DN, Intrafish
 - **SQLite** — stores raw articles and sentiment scores
 
@@ -43,7 +43,7 @@ SAB/
     data/
       models.py         — SQLAlchemy ORM models: Article, Sentiment
       db.py             — async engine factory, init_db(), get_db() context manager
-      newsweb.py        — Playwright scraper for Oslo Børs (Phase 1.3)
+      newsweb.py        — Oslo Børs scraper via JSON API + httpx (Phase 1.3 / 1.4)
       rss.py            — RSS scraper for news sites (Phase 1.5)
     nlp/
       scorer.py         — IDUN API calls and scoring logic (Phase 2)
