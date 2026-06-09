@@ -14,9 +14,10 @@ Build a sentiment analysis pipeline for Norwegian salmon/aquaculture companies l
 - `src/data/models.py` — SQLAlchemy ORM: `Article` + `Sentiment` tables
 - `src/data/db.py` — async engine, `init_db()`, `get_db()` context manager
 - `src/data/newsweb.py` — Newsweb (Oslo Børs) scraper via the public JSON API (`httpx`, no browser); `--backfill` (90 days) and `--incremental` (daily, dedup by URL) modes; PDF attachments converted to Markdown via `markitdown`
-- `alembic/` — migration tooling; initial migration creates both tables
+- `src/data/rss.py` — News scraper via **Google News RSS search** (`httpx` + `feedparser`); one query per company per locale (no/en), keyword-matched to tickers, **one article row per matched company**; `--backfill`/`--incremental` (same fetch for RSS), dedup by `(ticker, url)`
+- `alembic/` — migration tooling; initial migration creates both tables, a second swaps `articles` uniqueness from `url` to `(ticker, url)`
 - `data/` — SQLite DB lives here (gitignored, created by `alembic upgrade head`)
-- No sentiment scoring, RSS scraping, or signals yet
+- No sentiment scoring or signals yet
 
 ## Companies (initial scope)
 
@@ -62,7 +63,7 @@ System is dynamic: companies defined in `companies.json`. Add/remove without cod
 | 1.2 | SQLite schema + DB setup | done |
 | 1.3 | Newsweb (Oslo Børs) scraper (JSON API + httpx) | done |
 | 1.4 | Incremental fetch / dedup (+ documented cron scheduling) | done |
-| 1.5 | News RSS scraper (E24, DN, Intrafish via RSS feeds) | not started |
+| 1.5 | News RSS scraper (Google News RSS, per company) | done |
 | 2.1 | Sentiment scoring via IDUN (NorwAI) | not started |
 | 2.2 | Score storage + aggregation | not started |
 | 3.1 | Price data fetch (Yahoo Finance / Euronext) | not started |
@@ -76,12 +77,13 @@ System is dynamic: companies defined in `companies.json`. Add/remove without cod
 -- articles table
 id          INTEGER PRIMARY KEY
 ticker      TEXT        -- e.g. MOWI
-source      TEXT        -- newsweb | e24 | dn
-url         TEXT UNIQUE
+source      TEXT        -- newsweb | gnews
+url         TEXT        -- canonical link (Newsweb) or Google News redirect (gnews)
 published   DATETIME
 title       TEXT
 body        TEXT
 fetched_at  DATETIME
+-- UNIQUE(ticker, url): a multi-company news article is stored once per company
 
 -- sentiment table (Phase 2)
 id          INTEGER PRIMARY KEY
@@ -99,7 +101,10 @@ scored_at   DATETIME
 - **Attachments** are folded into the article `body` (message text + each PDF converted to Markdown) rather than a dedicated table — revisit if structured per-attachment metadata is needed later.
 - **Scheduling** is via OS cron / Windows Task Scheduler invoking `--incremental` (documented in `docs/setup.md`); no bespoke in-process scheduler. Add APScheduler later only if a long-running daemon is wanted.
 - The undocumented Newsweb API could change without notice — the scraper is isolated in `src/data/newsweb.py` and covered by tests using mocked transport, so breakage is easy to localize.
-- Phase 1.5 news scraping via RSS (E24, DN, Intrafish) — RSS is simpler since these sites have proper feeds.
+- **Cross-source dedup not implemented.** The same event can appear in Newsweb *and* via Google News under different URLs, so it would be scored twice. Deferred — best handled at scoring time (Phase 2) by fuzzy match on ticker + title + publish date.
+- **RSS source = Google News (unofficial).** E24/DN/Intrafish lack usable native feeds (DN/Intrafish paywalled), so `src/data/rss.py` uses Google News RSS search. Caveats: item URLs are Google redirect links (not canonical), the endpoint is unofficial, and a feed only exposes its current window (no historical backfill). Swap to native aggregator feeds later if canonical URLs are needed.
+- **RSS keyword false positives.** A bare keyword (e.g. `Grieg`) can match unrelated items (the *Edvard Grieg* oilfield). Tighten `companies.json` keywords, add a relevance step, or rely on the scorer returning *neutral* (Phase 2).
+- **Sentiment must be attributed per company (Phase 2).** A single RSS article can produce rows for several tickers; the scorer needs to judge sentiment *toward each ticker*, not the article overall.
 - IDUN off-peak scheduling important given 20 req/min limit
 
 ## Tech stack
@@ -110,6 +115,7 @@ scored_at   DATETIME
 | Storage | SQLite | zero ops, enough for this scale |
 | HTTP | `httpx` | async-capable; used directly against the Newsweb JSON API |
 | Scraping | Newsweb JSON API (no browser) | SPA is backed by a public JSON API — Playwright not needed |
+| News RSS | Google News RSS + `feedparser` | per-company aggregator; native E24/DN/Intrafish feeds unusable (paywalled) |
 | Attachments | `markitdown[pdf]` | convert PDF announcements to text for scoring |
 | Scheduling | OS cron / Task Scheduler | run `--incremental` off-peak; no in-process daemon |
 | NLP | IDUN NorwAI Magistral 24B | free, Norwegian-aware |

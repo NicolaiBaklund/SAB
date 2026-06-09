@@ -34,7 +34,10 @@ alembic upgrade head
 # 1. Fetch last 90 days of Newsweb announcements for all active companies
 python -m src.data.newsweb --backfill
 
-# 2. Score unscored articles (Phase 2)
+# 2. Fetch news about all active companies via Google News RSS
+python -m src.data.rss --backfill
+
+# 3. Score unscored articles (Phase 2)
 python -m src.nlp.scorer
 ```
 
@@ -43,11 +46,15 @@ python -m src.nlp.scorer
 After the initial backfill, fetch only new announcements:
 
 ```bash
-python -m src.data.newsweb --incremental
+python -m src.data.newsweb --incremental   # Oslo Børs announcements
+python -m src.data.rss --incremental        # Google News (same fetch as --backfill)
 ```
 
-This fetches from each ticker's most-recent stored announcement forward;
-deduplication is by URL, so it is safe to run repeatedly.
+Newsweb fetches from each ticker's most-recent stored announcement forward.
+For RSS, `--incremental` and `--backfill` do the same fetch — a feed only exposes
+its current window, so there is no historical backfill; both flags exist for cron
+parity. Deduplication (URL for Newsweb, `(ticker, url)` for RSS) makes both safe
+to run repeatedly.
 
 ### Scheduling
 
@@ -57,9 +64,11 @@ daemon ships with the project):
 - **Linux/macOS (cron)** — e.g. 03:00 nightly:
   ```cron
   0 3 * * *  cd /path/to/SAB && .venv/bin/python -m src.data.newsweb --incremental
+  5 3 * * *  cd /path/to/SAB && .venv/bin/python -m src.data.rss --incremental
   ```
-- **Windows (Task Scheduler)** — daily trigger running
-  `…\.venv\Scripts\python.exe -m src.data.newsweb --incremental` in the repo dir.
+- **Windows (Task Scheduler)** — daily triggers running
+  `…\.venv\Scripts\python.exe -m src.data.newsweb --incremental` and
+  `…\.venv\Scripts\python.exe -m src.data.rss --incremental` in the repo dir.
 
 ## Adding a Company
 
