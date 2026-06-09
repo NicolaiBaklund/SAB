@@ -13,10 +13,10 @@ Data Sources → Scraper → SQLite DB → NLP Scorer → Signal Generator
 - **News RSS scraper** (`httpx` + `feedparser`) — Google News RSS search, one query per company per locale (no/en); keyword-matched to tickers, one row per matched company
 - **SQLite** — stores raw articles and sentiment scores. `articles` uniqueness is `(ticker, url)` so a multi-company article is stored once per company
 
-### NLP Layer
-- IDUN API (NorwAI Magistral 24B) via OpenAI-compatible endpoint
-- Input: article title + body
-- Output: sentiment score (−1.0 to 1.0) + label
+### NLP Layer (Phase 2 — see `docs/sentiment.md`)
+- IDUN API via OpenAI-compatible endpoint; model chosen by an empirical bake-off (`src/nlp/eval.py`)
+- Input: stored article `title` + `body` only, plus per-ticker framing (deterministic, versioned prompt — no fetch at score time)
+- Output: a 3-point **price-impact** label (`negative`/`neutral`/`positive` → score `−1`/`0`/`+1`), a `relevance` flag (`direct`/`mentioned`/`off_topic`), and a one-line `rationale`
 
 ### Signal Layer
 - Aggregates sentiment scores per ticker over rolling window
@@ -46,7 +46,10 @@ SAB/
       newsweb.py        — Oslo Børs scraper via JSON API + httpx (Phase 1.3 / 1.4)
       rss.py            — Google News RSS scraper + httpx + feedparser (Phase 1.5)
     nlp/
-      scorer.py         — IDUN API calls and scoring logic (Phase 2)
+      prompt.py         — versioned price-impact prompt template + JSON parser (Phase 2.1)
+      client.py         — rate-limited IDUN OpenAI-compatible HTTP client (Phase 2.1)
+      scorer.py         — score unscored (article, ticker) rows → sentiment table; CLI (Phase 2.1)
+      eval.py           — model bake-off: gold-set sampler + metrics (Phase 2.1)
     signals/
       generator.py      — rolling sentiment → trading signal (Phase 3)
   alembic/              — database migrations
@@ -72,7 +75,11 @@ Key settings:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `DATABASE_URL` | `sqlite+aiosqlite:///./data/sab.db` | DB connection string |
-| `IDUN_KEY` | `Not Set` | API key for IDUN NorwAI endpoint |
+| `IDUN_KEY` | `Not Set` | IDUN API key (`SecretStr`; masked in logs/reprs) |
+| `IDUN_BASE_URL` | `https://llm.hpc.ntnu.no` | IDUN endpoint (override for a local vLLM) |
+| `IDUN_MODEL` | `mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4` | primary scorer model (Phase 2 bake-off winner) |
+| `LOOKBACK_DAYS` | `90` | ingestion window, shared by both scrapers |
+| `CORS_ORIGINS` | `["http://localhost:5173", "http://127.0.0.1:5173"]` | browser origins allowed to call the dashboard API (JSON list in env) |
 | `ENVIRONMENT` | `local` | Controls which .env file loads |
 
 To deploy to a server: set `ENVIRONMENT=production` and provide an absolute path in `DATABASE_URL`.  
