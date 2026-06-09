@@ -1,0 +1,48 @@
+<svg width="1100" height="360" viewBox="0 0 1100 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">SAB pipeline overview</title>
+  <desc id="desc">A visual overview of the SAB data flow from news sources through SQLite, review dashboard, scoring, and future trading signals.</desc>
+  <rect width="1100" height="360" rx="18" fill="#1e1e1e"/>
+  <rect x="1" y="1" width="1098" height="358" rx="17" stroke="#333333"/>
+  <text x="48" y="62" fill="#d4d4d4" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">SAB data flow</text>
+  <text x="48" y="94" fill="#858585" font-family="Segoe UI, Arial, sans-serif" font-size="15">Sentiment Analysis Bot turns company news into auditable sentiment, then trading signals.</text>
+
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect x="48" y="145" width="175" height="92" rx="10" fill="#252526" stroke="#333333"/>
+    <text x="70" y="179" fill="#4fc3f7" font-size="17" font-weight="700">News sources</text>
+    <text x="70" y="207" fill="#d4d4d4" font-size="14">Newsweb JSON</text>
+    <text x="70" y="227" fill="#d4d4d4" font-size="14">Google News RSS</text>
+
+    <path d="M238 191H292" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round"/>
+    <path d="M284 181L298 191L284 201" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="314" y="145" width="175" height="92" rx="10" fill="#252526" stroke="#333333"/>
+    <text x="336" y="179" fill="#4fc3f7" font-size="17" font-weight="700">Scrapers</text>
+    <text x="336" y="207" fill="#d4d4d4" font-size="14">Async httpx</text>
+    <text x="336" y="227" fill="#d4d4d4" font-size="14">PDF text extraction</text>
+
+    <path d="M504 191H558" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round"/>
+    <path d="M550 181L564 191L550 201" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="580" y="145" width="175" height="92" rx="10" fill="#252526" stroke="#333333"/>
+    <text x="602" y="179" fill="#4fc3f7" font-size="17" font-weight="700">SQLite</text>
+    <text x="602" y="207" fill="#d4d4d4" font-size="14">articles</text>
+    <text x="602" y="227" fill="#d4d4d4" font-size="14">sentiment</text>
+
+    <path d="M770 191H824" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round"/>
+    <path d="M816 181L830 191L816 201" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="846" y="145" width="206" height="92" rx="10" fill="#252526" stroke="#333333"/>
+    <text x="868" y="179" fill="#4fc3f7" font-size="17" font-weight="700">Dashboard now</text>
+    <text x="868" y="207" fill="#d4d4d4" font-size="14">Review articles</text>
+    <text x="868" y="227" fill="#d4d4d4" font-size="14">Audit model input</text>
+  </g>
+
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <rect x="580" y="274" width="214" height="44" rx="22" fill="#252526" stroke="#333333"/>
+    <text x="606" y="302" fill="#858585" font-size="14">Next: IDUN sentiment scoring</text>
+    <path d="M808 296H850" stroke="#858585" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M842 288L852 296L842 304" stroke="#858585" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="866" y="274" width="186" height="44" rx="22" fill="#252526" stroke="#333333"/>
+    <text x="892" y="302" fill="#858585" font-size="14">Then: price signals</text>
+  </g>
+</svg>
