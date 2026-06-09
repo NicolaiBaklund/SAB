@@ -36,7 +36,7 @@ export default function App() {
         <nav className="nav-list" aria-label="Dashboard views">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = window.location.pathname === item.href || item.href === "/review";
+            const active = window.location.pathname === item.href;
             return item.enabled ? (
               <a
                 className={`nav-item ${active ? "nav-item--active" : ""}`}
