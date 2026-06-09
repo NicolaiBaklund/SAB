@@ -1,4 +1,4 @@
-# SAB — Sentiment Analysis for Bergen (Norwegian Stock Trading)
+# SAB — Sentiment Analysis Bot (Norwegian Stock Trading)
 
 ## Goal
 
