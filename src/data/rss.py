@@ -202,12 +202,18 @@ async def scrape(client: RssClient, session, companies: list[dict]) -> int:
     # (ticker, url) -> Article, deduping within this run before we hit the DB.
     candidates: dict[tuple[str, str], Article] = {}
 
-    for _source, url in build_feeds(companies):
+    feeds = build_feeds(companies)
+
+    async def _fetch_one(url: str) -> list[dict]:
         try:
-            entries = await client.fetch_entries(url)
+            return await client.fetch_entries(url)
         except Exception as exc:  # noqa: BLE001 — one bad feed shouldn't sink the run
             logger.warning("feed failed (%s): %s", url, exc)
-            continue
+            return []
+
+    results = await asyncio.gather(*(_fetch_one(url) for _source, url in feeds))
+
+    for (_source, _url), entries in zip(feeds, results):
         for entry in entries:
             link = entry.get("link")
             if not link:
