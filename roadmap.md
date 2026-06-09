@@ -105,6 +105,8 @@ scored_at   DATETIME
 - **RSS source = Google News (unofficial).** E24/DN/Intrafish lack usable native feeds (DN/Intrafish paywalled), so `src/data/rss.py` uses Google News RSS search. Caveats: item URLs are Google redirect links (not canonical), the endpoint is unofficial, and a feed only exposes its current window (no historical backfill). Swap to native aggregator feeds later if canonical URLs are needed.
 - **RSS keyword false positives.** A bare keyword (e.g. `Grieg`) can match unrelated items (the *Edvard Grieg* oilfield). Tighten `companies.json` keywords, add a relevance step, or rely on the scorer returning *neutral* (Phase 2).
 - **Sentiment must be attributed per company (Phase 2).** A single RSS article can produce rows for several tickers; the scorer needs to judge sentiment *toward each ticker*, not the article overall.
+- **Phase 2 audit constraint.** The scorer input must be built *only* from the stored `title` + `body` (plus per-ticker framing) — no extra fetch/enrichment at score time — so the review GUI can reconstruct exactly what the model received without storing it. Prompt text stays a deterministic, versioned template in code; if prompt-editing moves to the GUI later, store prompts in the DB and record `sentiment.prompt_version`.
+- **Article review GUI** spec'd in `docs/gui-review-page.md` (Phase 4.x): one card per article (group by `url`), company–sentiment bubbles, explicit *unscored* state for articles absent from the `sentiment` table.
 - IDUN off-peak scheduling important given 20 req/min limit
 
 ## Tech stack
