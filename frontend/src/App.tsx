@@ -30,7 +30,10 @@ export default function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <span className="brand-mark">SAB</span>
+          <div className="brand-head">
+            <img className="brand-logo" src="/favicon.svg" alt="" width={30} height={30} />
+            <span className="brand-mark">SAB</span>
+          </div>
           <span className="brand-subtitle">Sentiment Analysis Bot</span>
         </div>
         <nav className="nav-list" aria-label="Dashboard views">

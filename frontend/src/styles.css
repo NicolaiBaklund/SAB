@@ -119,9 +119,21 @@ a:hover {
 
 .brand {
   display: grid;
-  gap: 4px;
+  gap: 6px;
   padding: 0 10px 22px;
   border-bottom: 1px solid var(--border);
+}
+
+.brand-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-logo {
+  flex: none;
+  border-radius: 8px;
+  filter: drop-shadow(0 0 10px var(--accent-glow));
 }
 
 .brand-mark {
