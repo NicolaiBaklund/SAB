@@ -69,15 +69,21 @@ in native aggregator feeds (E24, DN/FA, …) — the rest of the pipeline is unc
 ### How an item becomes article rows
 
 - **No server-side ticker filter:** every returned item is keyword-matched
-  (whole-word, case-insensitive) on `title + summary` against *all* companies in
+  (whole-word, case-insensitive) on `title + feed text` against *all* companies in
   `companies.json`. Items matching no tracked company are dropped.
 - **One row per matched ticker:** an article naming several companies is stored
   once per company. The `articles` uniqueness is therefore on `(ticker, url)`, not
   `url` alone (see the Phase 1.5 migration). Same `url` under different tickers is
   allowed; exact `(ticker, url)` repeats are deduped, so runs are safe to repeat.
-- **Body:** the cleaned RSS summary only (HTML stripped). No follow-up article
-  fetch — DN/E24 are paywalled and the headline + summary carry the signal. Full
-  article fetch can be added later if needed.
+- **Body:** the best text exposed by the feed item (`content:encoded` when
+  present, otherwise summary/description), with a best-effort follow-up fetch of
+  new article URLs to capture publisher metadata and paragraph text. If the fetch
+  fails, hits Google consent, or returns no useful HTML, the RSS text is kept.
+- **Freshness window:** Google News ranks by relevance, not date, and returns
+  years-old articles. Results are bounded to the last `MAX_AGE_DAYS` (90) days two
+  ways: the `when:90d` query operator filters at the source, and a post-filter on
+  `published` drops anything older (and any undated item) — the post-filter is
+  authoritative.
 - **Which company a multi-company article is positive/negative about** is the
   sentiment scorer's job (Phase 2), not the scraper's.
 
