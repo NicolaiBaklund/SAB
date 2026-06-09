@@ -62,13 +62,14 @@ from sqlalchemy import func, select
 from src.config import get_active_companies
 from src.data.db import get_db
 from src.data.models import Article
+from src.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api3.oslo.oslobors.no/v1/newsreader"
 SITE_MESSAGE_URL = "https://newsweb.oslobors.no/message/{message_id}"
 SOURCE = "newsweb"
-BACKFILL_DAYS = 90
+BACKFILL_DAYS = get_settings().LOOKBACK_DAYS  # shared ingestion window (settings.LOOKBACK_DAYS)
 INCREMENTAL_OVERLAP_DAYS = 2  # re-scan a couple of days each run; URL dedup drops repeats
 MESSAGE_FETCH_CONCURRENCY = 8
 ATTACHMENT_FETCH_CONCURRENCY = 3

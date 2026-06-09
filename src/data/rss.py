@@ -65,6 +65,7 @@ from sqlalchemy import select
 from src.config import get_active_companies
 from src.data.db import get_db
 from src.data.models import Article
+from src.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ GNEWS_LOCALES = [
 # articles. We bound freshness two ways: the ``when:Nd`` query operator filters
 # at the source, and an authoritative post-filter drops anything older than the
 # window (and any undated item). 90 days matches the project's Newsweb time scope.
-MAX_AGE_DAYS = 90
+MAX_AGE_DAYS = get_settings().LOOKBACK_DAYS  # shared ingestion window (settings.LOOKBACK_DAYS)
 MAX_ARTICLE_TEXT_CHARS = 6000
 ARTICLE_FETCH_CONCURRENCY = 5
 _USER_AGENT = "Mozilla/5.0 (compatible; SAB-rss-scraper/1.0; salmon sentiment research)"
