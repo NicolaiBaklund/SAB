@@ -198,10 +198,14 @@ class NewswebClient:
         data = resp.json()["data"]
         messages = data.get("messages", [])
 
-        if data.get("overflow") and (to_date - from_date) > timedelta(days=1):
+        if data.get("overflow") and from_date.date() < to_date.date():
             # The API has no offset paging, so split the window into two
             # non-overlapping inclusive date ranges and recurse. Snap the
-            # midpoint to midnight for clean day-granular halves.
+            # midpoint to midnight for clean day-granular halves. Stop only
+            # when the window is a single calendar day: a multi-day range
+            # whose datetime delta is exactly one day (e.g. fromDate=01-01,
+            # toDate=01-02) is still two inclusive dates and must be split,
+            # otherwise the capped response silently drops the second day.
             mid = from_date + (to_date - from_date) / 2
             mid = datetime(mid.year, mid.month, mid.day)
             left = await self.list_messages(issuer_id, from_date, mid)

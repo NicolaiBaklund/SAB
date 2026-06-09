@@ -136,12 +136,13 @@ async def test_list_messages_no_overflow_no_split():
 
 @pytest.mark.asyncio
 async def test_list_messages_bisects_on_overflow():
-    # Overflow on any window wider than a day -> recurse. Leaf windows (<= 1 day)
-    # return one message keyed by their fromDate, so we can see the split happened.
+    # Overflow keeps recursing until each window is a single calendar day; only
+    # those single-day leaves return a message keyed by fromDate, so the id set
+    # shows the range was split all the way down.
     def list_fn(params):
         fd = datetime.strptime(params["fromDate"], "%Y-%m-%d")
         td = datetime.strptime(params["toDate"], "%Y-%m-%d")
-        if (td - fd) > timedelta(days=1):
+        if fd != td:
             return {"messages": [], "overflow": True}
         mid = int(params["fromDate"].replace("-", ""))
         return {"messages": [{"messageId": mid}], "overflow": True}
@@ -149,7 +150,23 @@ async def test_list_messages_bisects_on_overflow():
     client = make_client(list_fn)
     msgs = await client.list_messages(5063, datetime(2026, 1, 1), datetime(2026, 1, 4))
     ids = {m["messageId"] for m in msgs}
-    assert ids == {20260101, 20260103}  # two non-overlapping leaf windows
+    assert ids == {20260101, 20260102, 20260103, 20260104}
+
+
+@pytest.mark.asyncio
+async def test_list_messages_splits_two_date_overflow():
+    # Regression: a window whose datetime delta is exactly one day is still two
+    # inclusive dates (fromDate=01-01, toDate=01-02). Overflow there must split
+    # into two single-day requests, not return the capped response and drop day 2.
+    def list_fn(params):
+        if params["fromDate"] != params["toDate"]:
+            return {"messages": [], "overflow": True}
+        mid = int(params["fromDate"].replace("-", ""))
+        return {"messages": [{"messageId": mid}], "overflow": True}
+
+    client = make_client(list_fn)
+    msgs = await client.list_messages(5063, datetime(2026, 1, 1), datetime(2026, 1, 2))
+    assert {m["messageId"] for m in msgs} == {20260101, 20260102}
 
 
 # --------------------------------------------------------------------------- #
