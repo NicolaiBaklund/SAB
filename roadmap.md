@@ -2,7 +2,7 @@
 
 ## Goal
 
-Build a sentiment analysis pipeline for Norwegian salmon/aquaculture companies listed on Oslo Børs. Aggregate news sentiment into trading signals.
+Build a sentiment analysis and financial-analysis pipeline for Norwegian salmon/aquaculture companies listed on Oslo Børs. Use financial context as the baseline, then evaluate whether news sentiment improves trading signals.
 
 ## What exists today
 
@@ -67,9 +67,10 @@ System is dynamic: companies defined in `companies.json`. Add/remove without cod
 | 2.1 | Sentiment scoring via IDUN (NorwAI) | not started |
 | 2.2 | Score storage + aggregation | not started |
 | 3.1 | Price data fetch (Yahoo Finance / Euronext) | not started |
-| 3.2 | Sentiment–price correlation analysis | not started |
-| 3.3 | Signal generation (rolling sentiment score) | not started |
-| 4.1 | Dashboard / visualization | not started |
+| 3.2 | Financial baseline analysis (returns, volatility, volume, fundamentals where available) | not started |
+| 3.3 | Sentiment–price / sentiment–financial baseline correlation analysis | not started |
+| 3.4 | Signal generation (financial baseline + rolling sentiment overlay) | not started |
+| 4.1 | Dashboard / visualization | in progress |
 
 ## Data schema (SQLite)
 
@@ -105,6 +106,8 @@ scored_at   DATETIME
 - **RSS source = Google News (unofficial).** E24/DN/Intrafish lack usable native feeds (DN/Intrafish paywalled), so `src/data/rss.py` uses Google News RSS search. Caveats: item URLs are Google redirect links (not canonical), the endpoint is unofficial, and a feed only exposes its current window (no historical backfill). Swap to native aggregator feeds later if canonical URLs are needed.
 - **RSS keyword false positives.** A bare keyword (e.g. `Grieg`) can match unrelated items (the *Edvard Grieg* oilfield). Tighten `companies.json` keywords, add a relevance step, or rely on the scorer returning *neutral* (Phase 2).
 - **Sentiment must be attributed per company (Phase 2).** A single RSS article can produce rows for several tickers; the scorer needs to judge sentiment *toward each ticker*, not the article overall.
+- **Phase 2 audit constraint.** The scorer input must be built *only* from the stored `title` + `body` (plus per-ticker framing) — no extra fetch/enrichment at score time — so the review GUI can reconstruct exactly what the model received without storing it. Prompt text stays a deterministic, versioned template in code; if prompt-editing moves to the GUI later, store prompts in the DB and record `sentiment.prompt_version`.
+- **Financial analysis baseline before signals.** Sentiment should not be the whole strategy. Add a reusable financial context layer (price history, returns, volatility, volume, valuation/fundamental metrics where available, earnings dates, and salmon-sector indicators if accessible), then measure whether sentiment improves that baseline.
 - IDUN off-peak scheduling important given 20 req/min limit
 
 ## Tech stack
