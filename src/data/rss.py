@@ -141,13 +141,17 @@ def match_companies(text: str, companies: list[dict]) -> list[str]:
 
 
 def entry_to_article(
-    entry: dict, source: str, ticker: str, fetched_at: datetime
+    entry: dict, url: str, source: str, ticker: str, fetched_at: datetime
 ) -> Article:
-    """Map a feedparser entry to an ``Article`` row for one ticker."""
+    """Map a feedparser entry to an ``Article`` row for one ticker.
+
+    ``url`` must be a non-empty string; the caller is responsible for
+    filtering entries without a link before calling this function.
+    """
     return Article(
         ticker=ticker,
         source=source,
-        url=entry.get("link"),
+        url=url,
         published=_parse_published(entry),
         title=_clean_text(entry.get("title")) or None,
         body=_clean_text(entry.get("summary")) or None,
@@ -213,7 +217,7 @@ async def scrape(client: RssClient, session, companies: list[dict]) -> int:
 
     results = await asyncio.gather(*(_fetch_one(url) for _source, url in feeds))
 
-    for (_source, _url), entries in zip(feeds, results):
+    for (source, _url), entries in zip(feeds, results):
         for entry in entries:
             link = entry.get("link")
             if not link:
@@ -222,7 +226,7 @@ async def scrape(client: RssClient, session, companies: list[dict]) -> int:
             for ticker in match_companies(text, companies):
                 key = (ticker, link)
                 if key not in candidates:
-                    candidates[key] = entry_to_article(entry, SOURCE, ticker, fetched_at)
+                    candidates[key] = entry_to_article(entry, link, source, ticker, fetched_at)
 
     existing = await _existing_ticker_urls(session, {url for _, url in candidates})
     new = [art for key, art in candidates.items() if key not in existing]

@@ -52,6 +52,12 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    # UNIQUE(url) cannot tolerate the same URL stored under two tickers.
+    # Keep only the lowest-id row per URL so the constraint can be recreated.
+    op.execute(
+        "DELETE FROM articles WHERE id NOT IN "
+        "(SELECT MIN(id) FROM articles GROUP BY url)"
+    )
     with op.batch_alter_table("articles", recreate="always") as batch:
         batch.drop_constraint("uq_articles_ticker_url", type_="unique")
         batch.create_unique_constraint("uq_articles_url", ["url"])

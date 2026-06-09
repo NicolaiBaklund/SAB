@@ -103,7 +103,7 @@ def test_match_companies_respects_word_boundary():
 def test_entry_to_article_maps_fields():
     art = entry_to_article(
         entry(title="Mowi Q1", link="http://x/9", summary="<b>beat</b>"),
-        "gnews", "MOWI", datetime(2026, 6, 9, 12, 0, 0),
+        "http://x/9", "gnews", "MOWI", datetime(2026, 6, 9, 12, 0, 0),
     )
     assert art.ticker == "MOWI"
     assert art.source == "gnews"
