@@ -292,6 +292,45 @@ async def test_fetch_company_fetches_message_details_concurrently(session):
 
 
 @pytest.mark.asyncio
+async def test_fetch_company_caps_attachment_concurrency_across_messages(session):
+    def list_fn(params):
+        return {"messages": [{"messageId": 1}, {"messageId": 2}], "overflow": False}
+
+    details = {
+        1: detail(1, attachments=[{"id": 10, "name": "a.pdf"}, {"id": 11, "name": "b.pdf"}]),
+        2: detail(2, attachments=[{"id": 20, "name": "c.pdf"}, {"id": 21, "name": "d.pdf"}]),
+    }
+    client = make_client(list_fn, details)
+    orig = client.get_attachment
+    in_flight = 0
+    max_in_flight = 0
+
+    async def slow_get_attachment(message_id, attachment_id):
+        nonlocal in_flight, max_in_flight
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0.01)
+        try:
+            return await orig(message_id, attachment_id)
+        finally:
+            in_flight -= 1
+
+    client.get_attachment = slow_get_attachment
+    company = {"ticker": "MOWI", "newsweb_issuer_id": 5063}
+    inserted = await fetch_company(
+        client,
+        session,
+        company,
+        datetime(2026, 4, 1),
+        _now(),
+        converter=lambda data, name: "EXTRACTED TEXT",
+    )
+
+    assert inserted == 2
+    assert max_in_flight <= 3
+
+
+@pytest.mark.asyncio
 async def test_fetch_company_skips_without_issuer_id(session):
     client = make_client(lambda params: {"messages": [], "overflow": False})
     company = {"ticker": "XXXX"}  # no newsweb_issuer_id

@@ -63,7 +63,6 @@ export default function App() {
         <header className="topbar">
           <div>
             <h1>Article Review</h1>
-            <p>Read-only review of ingested article sentiment.</p>
           </div>
           <ThemeToggle
             theme={theme}

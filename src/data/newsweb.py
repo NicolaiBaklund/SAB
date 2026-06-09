@@ -284,12 +284,15 @@ async def fetch_company(
     known = await _existing_urls(session, urls)
     new = [m for m in summaries if _message_url(m["messageId"]) not in known]
 
-    semaphore = asyncio.Semaphore(MESSAGE_FETCH_CONCURRENCY)
+    message_semaphore = asyncio.Semaphore(MESSAGE_FETCH_CONCURRENCY)
+    attachment_semaphore = asyncio.Semaphore(ATTACHMENT_FETCH_CONCURRENCY)
 
     async def _fetch_article(summary: dict) -> Article:
-        async with semaphore:
+        async with message_semaphore:
             detail = await client.get_message(summary["messageId"])
-            attachments_md = await _convert_attachments(client, detail, converter)
+            attachments_md = await _convert_attachments(
+                client, detail, converter, attachment_semaphore
+            )
             return message_to_article(detail, attachments_md, _now_utc())
 
     articles = await asyncio.gather(*(_fetch_article(summary) for summary in new))
@@ -298,11 +301,12 @@ async def fetch_company(
 
 
 async def _convert_attachments(
-    client: NewswebClient, detail: dict, converter: Converter
+    client: NewswebClient,
+    detail: dict,
+    converter: Converter,
+    semaphore: asyncio.Semaphore,
 ) -> list[tuple[str, str]]:
     """Download and convert every attachment; skip (with a warning) any that fail."""
-    semaphore = asyncio.Semaphore(ATTACHMENT_FETCH_CONCURRENCY)
-
     async def _convert_one(att: dict) -> tuple[str, str] | None:
         name = att.get("name", "")
         try:
