@@ -36,16 +36,54 @@ Playwright was dropped before implementation.
 
 ## News RSS — Phase 1.5
 
-**What it is:** Financial and industry news from Norwegian media.  
-**Scraper:** RSS feed parser (feedparser) — no Playwright needed.  
+**What it is:** General financial and industry news about each company.  
+**Scraper:** `src/data/rss.py` — `httpx` + `feedparser`, no Playwright.  
+**Source:** **Google News RSS search**, one query per company per locale.
 
-| Source | Language | Focus |
-|--------|----------|-------|
-| E24.no | Norwegian | General financial news |
-| DN.no (Dagens Næringsliv) | Norwegian | Business/financial newspaper |
-| Intrafish.com | English | Salmon/aquaculture industry |
+### Why Google News (and not E24 / DN / Intrafish directly)
+
+The original plan named three native feeds. A spike (June 2026) found that does
+not hold:
+
+| Source | Native RSS? | Finding |
+|--------|-------------|---------|
+| E24.no | yes | `https://e24.no/rss` — one general feed (section feeds 404); salmon mentions sparse |
+| DN.no | partial | `https://services.dn.no/api/feed/rss/` works, but general; topic filters too narrow |
+| Intrafish.com | **no** | NHST paywall, no public feed |
+
+A general feed is a lottery (you hope a salmon company shows up in the latest ~30
+items). **Google News RSS search** instead is a per-company aggregator:
+
+    https://news.google.com/rss/search?q="<term>"&hl=<lang>&gl=<country>&ceid=<...>
+
+One query per company returns up to ~100 recent articles *about that company*
+from all indexed media (E24, DN, Intrafish, NTB, local + international). We query
+each company in **Norwegian and English** (`GNEWS_LOCALES`) so the English trade
+press (Intrafish) is covered. Term = the company's first keyword, phrase-quoted to
+cut obvious noise (e.g. the *Grieg* oilfield vs *Grieg Seafood*).
+
+**Trade-off:** item `link` is a Google redirect URL, not a canonical publisher
+link, and the endpoint is unofficial. If clean canonical URLs matter later, swap
+in native aggregator feeds (E24, DN/FA, …) — the rest of the pipeline is unchanged.
+
+### How an item becomes article rows
+
+- **No server-side ticker filter:** every returned item is keyword-matched
+  (whole-word, case-insensitive) on `title + summary` against *all* companies in
+  `companies.json`. Items matching no tracked company are dropped.
+- **One row per matched ticker:** an article naming several companies is stored
+  once per company. The `articles` uniqueness is therefore on `(ticker, url)`, not
+  `url` alone (see the Phase 1.5 migration). Same `url` under different tickers is
+  allowed; exact `(ticker, url)` repeats are deduped, so runs are safe to repeat.
+- **Body:** the cleaned RSS summary only (HTML stripped). No follow-up article
+  fetch — DN/E24 are paywalled and the headline + summary carry the signal. Full
+  article fetch can be added later if needed.
+- **Which company a multi-company article is positive/negative about** is the
+  sentiment scorer's job (Phase 2), not the scraper's.
 
 **Gotchas:**
-- RSS feeds may not include full article body — may need follow-up HTTP fetch
-- Must filter by company keyword (ticker or company name) since feeds are not ticker-specific
-- Dedup against Newsweb content to avoid double-scoring the same event
+- Keyword quality drives false positives (a bare keyword like `Grieg` matches the
+  *Edvard Grieg* oilfield). Tighten keywords, or let the scorer return *neutral*
+  for off-topic items (Phase 2).
+- **Cross-source dedup** (the same event in Newsweb *and* here under different
+  URLs) is intentionally **not** handled yet — see roadmap "known issues".
