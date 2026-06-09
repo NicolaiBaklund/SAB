@@ -149,7 +149,7 @@ def entry_to_article(
         source=source,
         url=entry.get("link"),
         published=_parse_published(entry),
-        title=entry.get("title"),
+        title=_clean_text(entry.get("title")) or None,
         body=_clean_text(entry.get("summary")) or None,
         fetched_at=fetched_at,
     )
