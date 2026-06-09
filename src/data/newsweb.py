@@ -70,6 +70,8 @@ SITE_MESSAGE_URL = "https://newsweb.oslobors.no/message/{message_id}"
 SOURCE = "newsweb"
 BACKFILL_DAYS = 90
 INCREMENTAL_OVERLAP_DAYS = 2  # re-scan a couple of days each run; URL dedup drops repeats
+MESSAGE_FETCH_CONCURRENCY = 8
+ATTACHMENT_FETCH_CONCURRENCY = 3
 _USER_AGENT = "SAB-newsweb-scraper/1.0 (salmon sentiment research)"
 
 # A converter turns attachment bytes + filename into Markdown text. Injectable so
@@ -282,26 +284,36 @@ async def fetch_company(
     known = await _existing_urls(session, urls)
     new = [m for m in summaries if _message_url(m["messageId"]) not in known]
 
-    inserted = 0
-    for summary in new:
-        detail = await client.get_message(summary["messageId"])
-        attachments_md = await _convert_attachments(client, detail, converter)
-        session.add(message_to_article(detail, attachments_md, _now_utc()))
-        inserted += 1
-    return inserted
+    message_semaphore = asyncio.Semaphore(MESSAGE_FETCH_CONCURRENCY)
+    attachment_semaphore = asyncio.Semaphore(ATTACHMENT_FETCH_CONCURRENCY)
+
+    async def _fetch_article(summary: dict) -> Article:
+        async with message_semaphore:
+            detail = await client.get_message(summary["messageId"])
+            attachments_md = await _convert_attachments(
+                client, detail, converter, attachment_semaphore
+            )
+            return message_to_article(detail, attachments_md, _now_utc())
+
+    articles = await asyncio.gather(*(_fetch_article(summary) for summary in new))
+    session.add_all(articles)
+    return len(articles)
 
 
 async def _convert_attachments(
-    client: NewswebClient, detail: dict, converter: Converter
+    client: NewswebClient,
+    detail: dict,
+    converter: Converter,
+    semaphore: asyncio.Semaphore,
 ) -> list[tuple[str, str]]:
     """Download and convert every attachment; skip (with a warning) any that fail."""
-    out: list[tuple[str, str]] = []
-    for att in detail.get("attachments") or []:
+    async def _convert_one(att: dict) -> tuple[str, str] | None:
         name = att.get("name", "")
         try:
-            data = await client.get_attachment(detail["messageId"], att["id"])
-            markdown = await asyncio.to_thread(converter, data, name)
-            out.append((name, markdown))
+            async with semaphore:
+                data = await client.get_attachment(detail["messageId"], att["id"])
+                markdown = await asyncio.to_thread(converter, data, name)
+            return name, markdown
         except Exception as exc:  # noqa: BLE001 — one bad PDF shouldn't sink the run
             logger.warning(
                 "attachment %s of message %s failed: %s",
@@ -309,7 +321,12 @@ async def _convert_attachments(
                 detail.get("messageId"),
                 exc,
             )
-    return out
+            return None
+
+    results = await asyncio.gather(
+        *(_convert_one(att) for att in detail.get("attachments") or [])
+    )
+    return [result for result in results if result is not None]
 
 
 # A window function decides the [from, to] range for a given company.
@@ -329,6 +346,7 @@ async def _scrape_all(window: WindowFn, converter: Converter) -> int:
                 count = await fetch_company(
                     client, session, company, from_date, to_date, converter=converter
                 )
+                await session.commit()
                 total += count
                 logger.info("%s: %d new article(s)", company["ticker"], count)
     return total

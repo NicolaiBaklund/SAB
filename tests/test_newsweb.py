@@ -4,6 +4,7 @@ Network is stubbed with ``httpx.MockTransport`` (no real HTTP), and the PDF
 converter is stubbed so ``markitdown`` never runs. DB tests use the shared
 in-memory ``session`` fixture from ``conftest.py``.
 """
+import asyncio
 from datetime import datetime, timedelta
 
 import httpx
@@ -247,6 +248,86 @@ async def test_fetch_company_folds_attachment_text(session):
     art = (await session.execute(select(Article))).scalars().one()
     assert "## Attachment: q1.pdf" in art.body
     assert "EXTRACTED TEXT" in art.body
+
+
+@pytest.mark.asyncio
+async def test_fetch_company_fetches_message_details_concurrently(session):
+    def list_fn(params):
+        return {"messages": [{"messageId": 1}, {"messageId": 2}], "overflow": False}
+
+    details = {1: detail(1), 2: detail(2)}
+    client = make_client(list_fn, details)
+    orig = client.get_message
+    started: list[int] = []
+    both_started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_get_message(mid):
+        started.append(mid)
+        if len(started) == 2:
+            both_started.set()
+        await release.wait()
+        return await orig(mid)
+
+    client.get_message = blocked_get_message
+    company = {"ticker": "MOWI", "newsweb_issuer_id": 5063}
+    task = asyncio.create_task(
+        fetch_company(
+            client,
+            session,
+            company,
+            datetime(2026, 4, 1),
+            _now(),
+            converter=lambda data, name: "",
+        )
+    )
+
+    try:
+        await asyncio.wait_for(both_started.wait(), timeout=1)
+    finally:
+        release.set()
+
+    assert await asyncio.wait_for(task, timeout=1) == 2
+    assert set(started) == {1, 2}
+
+
+@pytest.mark.asyncio
+async def test_fetch_company_caps_attachment_concurrency_across_messages(session):
+    def list_fn(params):
+        return {"messages": [{"messageId": 1}, {"messageId": 2}], "overflow": False}
+
+    details = {
+        1: detail(1, attachments=[{"id": 10, "name": "a.pdf"}, {"id": 11, "name": "b.pdf"}]),
+        2: detail(2, attachments=[{"id": 20, "name": "c.pdf"}, {"id": 21, "name": "d.pdf"}]),
+    }
+    client = make_client(list_fn, details)
+    orig = client.get_attachment
+    in_flight = 0
+    max_in_flight = 0
+
+    async def slow_get_attachment(message_id, attachment_id):
+        nonlocal in_flight, max_in_flight
+        in_flight += 1
+        max_in_flight = max(max_in_flight, in_flight)
+        await asyncio.sleep(0.01)
+        try:
+            return await orig(message_id, attachment_id)
+        finally:
+            in_flight -= 1
+
+    client.get_attachment = slow_get_attachment
+    company = {"ticker": "MOWI", "newsweb_issuer_id": 5063}
+    inserted = await fetch_company(
+        client,
+        session,
+        company,
+        datetime(2026, 4, 1),
+        _now(),
+        converter=lambda data, name: "EXTRACTED TEXT",
+    )
+
+    assert inserted == 2
+    assert max_in_flight <= 3
 
 
 @pytest.mark.asyncio
