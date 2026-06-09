@@ -1,0 +1,15 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="SAB">
+  <defs>
+    <linearGradient id="sabEdge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4fc3f7" />
+      <stop offset="1" stop-color="#9cdcfe" />
+    </linearGradient>
+    <linearGradient id="sabTile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#23272f" />
+      <stop offset="1" stop-color="#14161c" />
+    </linearGradient>
+  </defs>
+  <rect x="2.5" y="2.5" width="59" height="59" rx="15" fill="url(#sabTile)" stroke="url(#sabEdge)" stroke-width="2.5" />
+  <path d="M18 22 L30 32 L18 42" stroke="url(#sabEdge)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" />
+  <rect x="34" y="37.5" width="16" height="5.5" rx="2.75" fill="#9cdcfe" />
+</svg>

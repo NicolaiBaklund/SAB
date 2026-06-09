@@ -17,6 +17,7 @@ Build a sentiment analysis and financial-analysis pipeline for Norwegian salmon/
 - `src/data/rss.py` — News scraper via **Google News RSS search** (`httpx` + `feedparser`); one query per company per locale (no/en), keyword-matched to tickers, **one article row per matched company**; `--backfill`/`--incremental` (same fetch for RSS), dedup by `(ticker, url)`
 - `alembic/` — migration tooling; initial migration creates both tables, a second swaps `articles` uniqueness from `url` to `(ticker, url)`
 - `data/` — SQLite DB lives here (gitignored, created by `alembic upgrade head`)
+- `frontend/` — React + Vite review dashboard (read-only article/sentiment review with filters and pagination); dark/light theming with a VS Code-style dark palette and bright cyan accents (`src/styles.css`), theme preference persisted in `localStorage`; SVG terminal-prompt logo (`public/favicon.svg`) used in the sidebar brand and as the favicon
 - No sentiment scoring or signals yet
 
 ## Companies (initial scope)
