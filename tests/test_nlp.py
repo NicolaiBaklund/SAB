@@ -315,6 +315,42 @@ async def test_score_skips_failed_rows(session, monkeypatch):
     assert list((await session.execute(select(Sentiment))).scalars()) == []
 
 
+@pytest.mark.asyncio
+async def test_score_checkpoints_progress_before_a_crash(session, monkeypatch):
+    """A crash mid-batch keeps the rows committed at the last 25-row checkpoint."""
+    monkeypatch.setattr(scorer, "load_companies",
+                        lambda: [{"ticker": "MOWI", "name": "Mowi ASA"}])
+    session.add_all([
+        Article(ticker="MOWI", source="gnews", url=f"u{n}", title="t", body="b",
+                fetched_at=datetime(2026, 6, 9))
+        for n in range(26)
+    ])
+    await session.flush()
+
+    # Score 25 rows, then raise a SIGINT-style interrupt on the 26th. KeyboardInterrupt
+    # is a BaseException, so the per-row ``except Exception`` does not swallow it and it
+    # propagates out of ``score`` — exactly the uncaught-crash case the checkpoint guards.
+    calls = 0
+
+    async def crash_on_26th(client, article, name, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 26:
+            raise KeyboardInterrupt
+        return ScoreResult(label="positive", score=1.0, relevance="direct", rationale="")
+
+    monkeypatch.setattr(scorer, "score_article", crash_on_26th)
+    with pytest.raises(KeyboardInterrupt):
+        await scorer.score(FakeClient("m", []), session, now=datetime(2026, 6, 9))
+
+    # ``get_db`` rolls back on the way out of a crashing run, discarding anything
+    # not yet committed. Without the in-loop checkpoint that would wipe all 25; the
+    # checkpoint at i == 25 commits them first, so they survive the rollback.
+    await session.rollback()
+    rows = list((await session.execute(select(Sentiment))).scalars())
+    assert len(rows) == 25
+
+
 # --------------------------------------------------------------------------- #
 # eval: metrics
 # --------------------------------------------------------------------------- #

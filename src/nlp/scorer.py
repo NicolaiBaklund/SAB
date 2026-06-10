@@ -20,9 +20,11 @@ free: each row carries exactly one ticker, and the prompt judges sentiment towar
 ## Re-runnable and model-scoped
 
 "Unscored" means "no sentiment row with this ``model``". Re-running is therefore
-safe and resumable (a crash mid-batch just leaves rows unscored), and scoring the
-same articles with a *second* model — the Phase 2 bake-off — simply inserts a new
-set of rows rather than colliding with the first.
+safe and resumable: progress is committed every 25 rows (see :func:`score`), so a
+crash/SIGINT/timeout mid-batch loses at most the handful of in-flight rows since
+the last checkpoint — not the whole run — and they are simply rescored next time.
+Scoring the same articles with a *second* model — the Phase 2 bake-off — inserts a
+new set of rows rather than colliding with the first.
 
 ## Usage
 
@@ -120,6 +122,9 @@ async def score(
     A row that fails twice (still unparseable, or an IDUN error) is logged and
     skipped — it stays unscored and is retried on the next run rather than
     poisoning the batch.
+
+    Progress is committed every 25 rows so a crash mid-batch keeps the work done
+    so far; ``get_db`` commits any final partial checkpoint on a clean exit.
     """
     now = now or _now_utc()
     names = _company_names()
@@ -148,6 +153,9 @@ async def score(
         )
         written += 1
         if i % 25 == 0:
+            # Checkpoint progress so a crash/SIGINT/timeout mid-batch keeps the
+            # rows already scored instead of rolling back the whole run.
+            await session.commit()
             logger.info("scored %d/%d", i, len(articles))
     logger.info("done: %d scored, %d skipped", written, len(articles) - written)
     return written

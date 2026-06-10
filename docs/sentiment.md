@@ -78,6 +78,14 @@ multi-company article **once per ticker**. Scoring is therefore just "score each
 unscored row", and each row's prompt judges sentiment toward exactly one company.
 No fan-out at score time.
 
+## Scoring is checkpointed and resumable
+
+"Unscored" means "no `sentiment` row for this `model`", so a run only ever picks up
+what is still missing. To make that resumability real on a ~33-minute full run, the
+scorer commits every 25 rows rather than once at the end: a crash, `SIGINT`, or
+timeout mid-batch loses at most the handful of rows since the last checkpoint — not
+the whole run — and those simply get rescored next time.
+
 ## Model choice — decided by a bake-off, not a spec sheet
 
 Every IDUN model is free, so "free + Norwegian-aware" no longer selects the small
