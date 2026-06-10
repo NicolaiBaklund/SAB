@@ -9,12 +9,18 @@ from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from src.config import get_active_companies
 from src.data.db import get_db
 from src.data.models import Article, Sentiment
 
 ScoreState = Literal["scored", "unscored"]
 
 router = APIRouter(prefix="/api/review", tags=["review"])
+
+
+def _active_tickers() -> set[str]:
+    """Tickers of companies marked active in companies.json."""
+    return {company["ticker"] for company in get_active_companies()}
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:
@@ -139,12 +145,16 @@ async def list_review_articles(
     filters = filters or ReviewFilters()
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
+    active_tickers = _active_tickers()
 
     # Step 1: Paginate over URL groups in SQL.
     # SQLite places NULLs last in DESC order, so articles with no published date
     # sort after dated ones without an explicit NULLS LAST clause.
+    # Only active companies (companies.json) are reviewed, so rows for inactive
+    # tickers are excluded before grouping, counting, and paginating.
     url_page_stmt = _apply_sql_filters(
         select(Article.url)
+        .where(Article.ticker.in_(active_tickers))
         .group_by(Article.url)
         .order_by(
             func.max(Article.published).desc(),
@@ -155,7 +165,9 @@ async def list_review_articles(
         filters,
     )
     total_stmt = _apply_sql_filters(
-        select(func.count(distinct(Article.url))),
+        select(func.count(distinct(Article.url))).where(
+            Article.ticker.in_(active_tickers)
+        ),
         filters,
     )
 
@@ -172,6 +184,7 @@ async def list_review_articles(
     articles_result = await session.execute(
         select(Article)
         .where(Article.url.in_(page_urls))
+        .where(Article.ticker.in_(active_tickers))
         .options(selectinload(Article.sentiment))
     )
     by_url: dict[str, list[Article]] = {}
@@ -195,8 +208,11 @@ async def list_review_articles(
 
 
 async def get_review_filter_options(session: AsyncSession) -> dict[str, list[str]]:
+    active_tickers = _active_tickers()
     tickers_result = await session.execute(
-        select(distinct(Article.ticker)).order_by(Article.ticker)
+        select(distinct(Article.ticker))
+        .where(Article.ticker.in_(active_tickers))
+        .order_by(Article.ticker)
     )
     sources_result = await session.execute(
         select(distinct(Article.source)).order_by(Article.source)
