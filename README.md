@@ -43,7 +43,7 @@ SAB currently has the data foundation and first dashboard view in place.
 | Google News RSS scraper | Done |
 | Incremental fetch workflow | Done |
 | Read-only article review dashboard | Done |
-| IDUN sentiment scoring | Planned |
+| IDUN sentiment scoring | Built (`src/nlp/`); model bake-off + first run pending — see `docs/sentiment.md` |
 | Financial analysis baseline | Planned |
 | Price data and sentiment correlation | Planned |
 | Trading signal generation | Planned |

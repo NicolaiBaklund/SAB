@@ -32,9 +32,18 @@ class Sentiment(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     article_id: Mapped[int] = mapped_column(Integer, ForeignKey("articles.id"), nullable=False)
+    # 3-point price-impact scale: score in {-1.0, 0.0, +1.0}, derived from `label`
+    # ({negative: -1, neutral: 0, positive: +1}). Stored numeric for aggregation,
+    # `label` kept for display. See src/nlp/prompt.py.
     score: Mapped[float] = mapped_column(Float, nullable=False)
     label: Mapped[str] = mapped_column(Text, nullable=False)  # positive | negative | neutral
+    # Whether the article is materially about this ticker: direct | mentioned |
+    # off_topic. `off_topic` is coerced to neutral/0 — it flags keyword false
+    # matches (e.g. the Edvard Grieg oilfield vs Grieg Seafood) for GUI review.
+    relevance: Mapped[str | None] = mapped_column(Text)
+    rationale: Mapped[str | None] = mapped_column(Text)  # one-line model justification
     model: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_version: Mapped[str | None] = mapped_column(Text)  # which prompt template produced this
     scored_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     article: Mapped["Article"] = relationship(back_populates="sentiment")

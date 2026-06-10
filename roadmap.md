@@ -18,7 +18,8 @@ Build a sentiment analysis and financial-analysis pipeline for Norwegian salmon/
 - `alembic/` — migration tooling; initial migration creates both tables, a second swaps `articles` uniqueness from `url` to `(ticker, url)`
 - `data/` — SQLite DB lives here (gitignored, created by `alembic upgrade head`)
 - `frontend/` — React + Vite review dashboard (read-only article/sentiment review with filters and pagination); dark/light theming with a VS Code-style dark palette and bright cyan accents (`src/styles.css`), theme preference persisted in `localStorage`; SVG terminal-prompt logo (`public/favicon.svg`) used in the sidebar brand and as the favicon
-- No sentiment scoring or signals yet
+- `src/nlp/` — sentiment scoring stack (Phase 2.1): `prompt.py` (versioned, deterministic price-impact template + JSON parser), `client.py` (rate-limited IDUN OpenAI-compatible client, guided JSON on by default + self-heal), `scorer.py` (scores unscored `(article, ticker)` rows → `sentiment` table; `--dry-run` prints the reconstructed prompt), `eval.py` (model bake-off: gold-set sampler + accuracy/macro-F1/self-consistency/κ metrics). See `docs/sentiment.md`. **Built, unit-tested, and the bake-off has chosen Mistral-Large-3-675B; the first full scoring run over the stored articles is still pending.**
+- No price data or signals yet
 
 ## Companies (initial scope)
 
@@ -52,9 +53,12 @@ System is dynamic: companies defined in `companies.json`. Add/remove without cod
 
 ## NLP
 
-- Model: **NorwAI Magistral 24B** on IDUN (Norwegian-aware, OpenAI-compatible, free)
-- Endpoint: `https://llm.hpc.ntnu.no`
+- **Lens:** price-impact / investor — "does this news raise or lower the expected share price of *this* company?" — not editorial tone.
+- **Scale:** 3-point categorical — `negative` / `neutral` / `positive` → score `−1 / 0 / +1`. The model emits the label; the float is derived (no false-precision regression). Plus a `relevance` (`direct` / `mentioned` / `off_topic`) that guards keyword false matches, and a one-line `rationale`.
+- **Model:** **Mistral-Large-3-675B** (`settings.IDUN_MODEL`), chosen by an empirical bake-off over a 40-item gold set (`src/nlp/eval.py`): best off-topic recall (1.00) and 4.5× faster than runner-up GLM-4.7, with accuracy (0.93) within labeling noise. Guided JSON (`response_format`) is required — reasoning models (NorwAI, Qwen) otherwise emit prose/empty. Full results: `docs/sentiment.md`.
+- Endpoint: `https://llm.hpc.ntnu.no` (OpenAI-compatible)
 - Rate limit: 20 req/min, 300k tokens/min — run off-peak (18:00–06:00 / weekends)
+- Full design: `docs/sentiment.md`
 
 ## Progress
 
@@ -65,8 +69,8 @@ System is dynamic: companies defined in `companies.json`. Add/remove without cod
 | 1.3 | Newsweb (Oslo Børs) scraper (JSON API + httpx) | done |
 | 1.4 | Incremental fetch / dedup (+ documented cron scheduling) | done |
 | 1.5 | News RSS scraper (Google News RSS, per company) | done |
-| 2.1 | Sentiment scoring via IDUN (NorwAI) | not started |
-| 2.2 | Score storage + aggregation | not started |
+| 2.1 | Sentiment scoring via IDUN (prompt + client + scorer + bake-off harness) | code done; model bake-off + first run pending |
+| 2.2 | Score storage (+ aggregation) | storage done (schema + scorer writes); aggregation pending |
 | 3.1 | Price data fetch (Yahoo Finance / Euronext) | not started |
 | 3.2 | Financial baseline analysis (returns, volatility, volume, fundamentals where available) | not started |
 | 3.3 | Sentiment–price / sentiment–financial baseline correlation analysis | not started |
@@ -88,12 +92,15 @@ fetched_at  DATETIME
 -- UNIQUE(ticker, url): a multi-company news article is stored once per company
 
 -- sentiment table (Phase 2)
-id          INTEGER PRIMARY KEY
-article_id  INTEGER REFERENCES articles(id)
-score       REAL        -- -1.0 to 1.0
-label       TEXT        -- positive | negative | neutral
-model       TEXT        -- model used
-scored_at   DATETIME
+id              INTEGER PRIMARY KEY
+article_id      INTEGER REFERENCES articles(id)
+score           REAL        -- 3-point: -1.0 | 0.0 | +1.0 (derived from label)
+label           TEXT        -- positive | negative | neutral
+relevance       TEXT        -- direct | mentioned | off_topic (keyword-match quality)
+rationale       TEXT        -- one-line model justification
+model           TEXT        -- IDUN model id used
+prompt_version  TEXT        -- template version (e.g. price-impact-v1)
+scored_at       DATETIME
 ```
 
 ## Known issues / next steps
@@ -105,9 +112,10 @@ scored_at   DATETIME
 - The undocumented Newsweb API could change without notice — the scraper is isolated in `src/data/newsweb.py` and covered by tests using mocked transport, so breakage is easy to localize.
 - **Cross-source dedup not implemented.** The same event can appear in Newsweb *and* via Google News under different URLs, so it would be scored twice. Deferred — best handled at scoring time (Phase 2) by fuzzy match on ticker + title + publish date.
 - **RSS source = Google News (unofficial).** E24/DN/Intrafish lack usable native feeds (DN/Intrafish paywalled), so `src/data/rss.py` uses Google News RSS search. Caveats: item URLs are Google redirect links (not canonical), the endpoint is unofficial, and a feed only exposes its current window (no historical backfill). Results are bounded to the last `MAX_AGE_DAYS` (90) days via the `when:90d` query operator **and** an authoritative `published` post-filter, since Google News otherwise ranks years-old articles by relevance. Swap to native aggregator feeds later if canonical URLs are needed.
-- **RSS keyword false positives.** A bare keyword (e.g. `Grieg`) can match unrelated items (the *Edvard Grieg* oilfield). Tighten `companies.json` keywords, add a relevance step, or rely on the scorer returning *neutral* (Phase 2).
-- **Sentiment must be attributed per company (Phase 2).** A single RSS article can produce rows for several tickers; the scorer needs to judge sentiment *toward each ticker*, not the article overall.
-- **Phase 2 audit constraint.** The scorer input must be built *only* from the stored `title` + `body` (plus per-ticker framing) — no extra fetch/enrichment at score time — so the review GUI can reconstruct exactly what the model received without storing it. Prompt text stays a deterministic, versioned template in code; if prompt-editing moves to the GUI later, store prompts in the DB and record `sentiment.prompt_version`.
+- **RSS keyword false positives.** A bare keyword (e.g. `Grieg`) can match unrelated items (the *Edvard Grieg* oilfield). *Addressed (Phase 2.1):* the scorer returns `relevance: off_topic` (coerced to neutral/0) and stores the flag so the GUI can surface bad matches; still worth tightening `companies.json` keywords as they show up.
+- **Sentiment attributed per company.** *Resolved (Phase 2.1):* the scrapers already store one row per `(ticker, url)`, and the scorer's prompt judges price impact toward that single ticker — see `docs/sentiment.md`.
+- **Prompt versioning persistence + GUI editing (future).** Today each `sentiment` row stores a `prompt_version` *tag* and the template text lives in code (old versions recoverable via git). Planned upgrade: a `prompt_versions` table holding each version's full text (system prompt, few-shot, user template, `max_body_chars`) keyed by the version string, so every version is reconstructable from the DB without git — and the prerequisite for editing prompts in the GUI (save a new `prompt_versions` row, bump the tag). Fold the `--max-body-chars` runtime knob into the version at that point (it currently changes the model input but is not captured by the tag).
+- **Phase 2 audit constraint.** *Implemented (Phase 2.1):* `src/nlp/prompt.py` builds the model input *only* from the stored `title` + `body` plus per-ticker framing (no fetch/enrichment at score time), as a deterministic versioned template; `sentiment.prompt_version` records which template produced each score, so the GUI can reconstruct the exact input. `--dry-run` prints it.
 - **Financial analysis baseline before signals.** Sentiment should not be the whole strategy. Add a reusable financial context layer (price history, returns, volatility, volume, valuation/fundamental metrics where available, earnings dates, and salmon-sector indicators if accessible), then measure whether sentiment improves that baseline.
 - IDUN off-peak scheduling important given 20 req/min limit
 
@@ -122,5 +130,5 @@ scored_at   DATETIME
 | News RSS | Google News RSS + `feedparser` | per-company aggregator; native E24/DN/Intrafish feeds unusable (paywalled) |
 | Attachments | `markitdown[pdf]` | convert PDF announcements to text for scoring |
 | Scheduling | OS cron / Task Scheduler | run `--incremental` off-peak; no in-process daemon |
-| NLP | IDUN NorwAI Magistral 24B | free, Norwegian-aware |
+| NLP | IDUN (OpenAI-compatible) via `httpx`; model chosen by bake-off | free; Norwegian-capable; no extra SDK dependency |
 | Config | `companies.json` | dynamic, no code change to add company |

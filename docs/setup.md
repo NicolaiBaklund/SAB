@@ -45,8 +45,28 @@ python -m src.data.newsweb --backfill
 # 2. Fetch news about all active companies via Google News RSS
 python -m src.data.rss --backfill
 
-# 3. Score unscored articles (Phase 2)
+# 3. Score unscored articles (Phase 2) — see "Sentiment scoring" below
 python -m src.nlp.scorer
+```
+
+## Sentiment scoring (Phase 2)
+
+Full design in `docs/sentiment.md`. Scoring needs `IDUN_KEY` set and should run
+off-peak (18:00–06:00 / weekends) given the 20 req/min limit.
+
+```bash
+# Inspect the exact prompt the model will receive for real articles (no API call)
+python -m src.nlp.scorer --dry-run --limit 3
+
+# Pick the model empirically: sample a gold set, hand-label gold_label in the
+# JSONL, then compare candidate models (accuracy / macro-F1 / consistency / κ)
+python -m src.nlp.eval sample --n 30
+python -m src.nlp.eval run --k 2
+
+# Score all unscored (article, ticker) rows with the chosen model. Re-runnable:
+# "unscored" means "no row for this model", so a second model re-scores in full.
+python -m src.nlp.scorer --model NorwAI/NorwAI-Magistral-24B-reasoning
+python -m src.nlp.scorer --limit 50        # cap a run
 ```
 
 ## Daily Updates (incremental)
