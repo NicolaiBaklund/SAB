@@ -140,6 +140,12 @@ the keyword matched the wrong subject or the company is irrelevant to the item.
 single main price driver behind your label.
 Do not output markdown, code fences, comments, or any text outside the JSON."""
 
+# Nudge appended for a single re-ask when the first reply will not parse.
+REASK = (
+    "Your previous reply could not be parsed. Reply with ONLY the JSON object "
+    '{"label": "...", "relevance": "...", "rationale": "..."} and nothing else.'
+)
+
 
 def _format_user(name: str, ticker: str, title: str | None, body: str | None,
                  *, max_body_chars: int = DEFAULT_MAX_BODY_CHARS) -> str:

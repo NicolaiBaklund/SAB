@@ -52,8 +52,7 @@ from sqlalchemy import func, select
 from src.data.db import get_db
 from src.data.models import Article
 from src.nlp.client import IdunClient, RateLimiter
-from src.nlp.prompt import VALID_LABELS, build_messages, parse_response
-from src.nlp.scorer import _REASK
+from src.nlp.prompt import REASK, VALID_LABELS, build_messages, parse_response
 from src.settings import get_settings
 
 logger = logging.getLogger(__name__)
@@ -196,7 +195,7 @@ async def _predict_once(client: IdunClient, item: GoldItem) -> tuple[str, str]:
     try:
         res = parse_response(raw)
     except Exception:  # noqa: BLE001 — re-ask once, mirroring the scorer
-        retry = [*messages, {"role": "assistant", "content": raw}, {"role": "user", "content": _REASK}]
+        retry = [*messages, {"role": "assistant", "content": raw}, {"role": "user", "content": REASK}]
         res = parse_response(await client.complete(retry))
     return res.label, res.relevance
 

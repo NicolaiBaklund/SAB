@@ -54,6 +54,7 @@ from src.nlp.client import IdunClient, RateLimiter
 from src.nlp.prompt import (
     DEFAULT_MAX_BODY_CHARS,
     PROMPT_VERSION,
+    REASK,
     ParseError,
     ScoreResult,
     build_messages,
@@ -62,12 +63,6 @@ from src.nlp.prompt import (
 from src.settings import get_settings
 
 logger = logging.getLogger(__name__)
-
-# Nudge appended for a single re-ask when the first reply will not parse.
-_REASK = (
-    "Your previous reply could not be parsed. Reply with ONLY the JSON object "
-    '{"label": "...", "relevance": "...", "rationale": "..."} and nothing else.'
-)
 
 
 def _now_utc() -> datetime:
@@ -105,7 +100,7 @@ async def score_article(
         return parse_response(raw)
     except ParseError as first:
         logger.debug("reask article %s after parse error: %s", article.id, first)
-        retry = [*messages, {"role": "assistant", "content": raw}, {"role": "user", "content": _REASK}]
+        retry = [*messages, {"role": "assistant", "content": raw}, {"role": "user", "content": REASK}]
         return parse_response(await client.complete(retry))
 
 
