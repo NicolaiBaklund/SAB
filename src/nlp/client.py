@@ -52,7 +52,7 @@ class RateLimiter:
 
     async def acquire(self) -> None:
         async with self._lock:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             now = loop.time()
             wait = self._next_allowed - now
             if wait > 0:
