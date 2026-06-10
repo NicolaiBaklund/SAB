@@ -72,7 +72,7 @@ DEFAULT_BAKEOFF_MODELS = [
 
 @dataclass
 class GoldItem:
-    article_id: int | None
+    article_id: int  # the DB reference; article text is re-fetched from it
     ticker: str
     name: str
     title: str | None
@@ -87,9 +87,14 @@ class GoldItem:
 async def sample(n: int, out_path: Path, *, force: bool = False) -> int:
     """Write ``n`` random article rows to ``out_path`` as a labeling template.
 
-    Each line is a full JSON record with ``gold_label`` / ``gold_relevance`` left
-    blank for you to fill in. Refuses to clobber an existing file unless ``force``
-    (so you don't lose hand labels).
+    Each line carries the ``article_id`` reference plus ``ticker`` / ``name`` /
+    ``title`` so you can recognise the item, with ``gold_label`` /
+    ``gold_relevance`` left blank to fill in. The article **body is deliberately
+    not written**: it is re-fetched from the DB at eval time (see
+    :func:`load_goldset`), so raw — possibly ToS-restricted — article text is
+    never copied into the repo. Read the full body in the DB/review GUI while
+    labeling. Refuses to clobber an existing file unless ``force`` (so you don't
+    lose hand labels).
     """
     if out_path.exists() and not force:
         raise SystemExit(f"{out_path} exists; pass --force to overwrite")
@@ -108,7 +113,6 @@ async def sample(n: int, out_path: Path, *, force: bool = False) -> int:
                 "ticker": a.ticker,
                 "name": names.get(a.ticker, a.ticker),
                 "title": a.title,
-                "body": a.body,
                 "gold_label": "",  # <- fill: positive | neutral | negative
                 "gold_relevance": "",  # <- optional: direct | mentioned | off_topic
             }
@@ -117,9 +121,21 @@ async def sample(n: int, out_path: Path, *, force: bool = False) -> int:
     return len(articles)
 
 
-def load_goldset(path: Path) -> list[GoldItem]:
-    """Load labelled gold items, skipping any line whose ``gold_label`` is blank."""
-    items: list[GoldItem] = []
+async def load_goldset(path: Path) -> list[GoldItem]:
+    """Load labelled gold items, re-fetching article text from the DB by ``article_id``.
+
+    The gold set on disk stores only an ``article_id`` reference plus the hand
+    labels (the ``ticker`` / ``name`` / ``title`` fields are human-readable hints).
+    The article ``title`` and ``body`` are read back from the DB here, so the raw
+    news text lives only in its single source of truth and is never duplicated
+    into the repo — the same audit-trail argument the scorer makes (nothing is
+    enriched at score time; the prompt is rebuilt from the stored row).
+
+    Lines whose ``gold_label`` is blank/invalid are skipped. References whose
+    article is no longer in the DB (e.g. dropped by the 90-day retention job) are
+    skipped with a warning, so a partially-pruned gold set still runs.
+    """
+    refs: list[tuple[int, str, str | None]] = []  # (article_id, gold_label, gold_relevance)
     with path.open(encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -129,17 +145,43 @@ def load_goldset(path: Path) -> list[GoldItem]:
             label = (r.get("gold_label") or "").strip().lower()
             if label not in VALID_LABELS:
                 continue  # unlabelled / invalid — skip
-            items.append(
-                GoldItem(
-                    article_id=r.get("article_id"),
-                    ticker=r["ticker"],
-                    name=r.get("name", r["ticker"]),
-                    title=r.get("title"),
-                    body=r.get("body"),
-                    gold_label=label,
-                    gold_relevance=(r.get("gold_relevance") or "").strip().lower() or None,
-                )
+            article_id = r.get("article_id")
+            if article_id is None:
+                logger.warning("gold line without article_id — skipping: %r", r)
+                continue
+            relevance = (r.get("gold_relevance") or "").strip().lower() or None
+            refs.append((int(article_id), label, relevance))
+
+    if not refs:
+        return []
+
+    from src.config import load_companies
+
+    names = {c["ticker"]: c["name"] for c in load_companies()}
+    async with get_db() as session:
+        stmt = select(Article).where(Article.id.in_([aid for aid, _, _ in refs]))
+        by_id = {a.id: a for a in (await session.execute(stmt)).scalars()}
+
+    items: list[GoldItem] = []
+    missing = 0
+    for article_id, label, relevance in refs:
+        a = by_id.get(article_id)
+        if a is None:
+            missing += 1
+            continue
+        items.append(
+            GoldItem(
+                article_id=a.id,
+                ticker=a.ticker,
+                name=names.get(a.ticker, a.ticker),
+                title=a.title,
+                body=a.body,
+                gold_label=label,
+                gold_relevance=relevance,
             )
+        )
+    if missing:
+        logger.warning("%d gold reference(s) not found in DB (pruned?) — skipped", missing)
     return items
 
 
@@ -313,7 +355,7 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(sample(args.n, args.out, force=args.force))
         return
 
-    goldset = load_goldset(args.goldset)
+    goldset = asyncio.run(load_goldset(args.goldset))
     if not goldset:
         raise SystemExit(f"no labelled items in {args.goldset} — fill in gold_label first")
     if args.limit:

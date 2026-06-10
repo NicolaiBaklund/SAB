@@ -93,6 +93,13 @@ NorwAI model over the (also Norwegian-capable) frontier models. We decided
 empirically with `src/nlp/eval.py` over a 40-item hand-labeled gold set
 (`data/eval/goldset.jsonl`: 6 positive, 6 negative, 6 off_topic, 22 neutral).
 
+The gold set stores only an `article_id` reference plus the hand labels (with
+`ticker`/`name`/`title` as readable hints) — **never the article body**. The
+text is re-fetched from the DB by `article_id` at eval time, so raw — possibly
+ToS-restricted — news bodies are not duplicated into the repo (the DB is their
+single source of truth, the same audit argument the scorer makes). References to
+articles dropped by the 90-day retention job are skipped with a warning.
+
 ### Guided JSON is required, not optional
 
 Reasoning models (NorwAI-Magistral, Qwen-thinking) **ignore** a "return only JSON"
@@ -173,7 +180,8 @@ needed. Run off-peak (18:00–06:00 / weekends).
 # Inspect the exact prompt for real articles (no API call)
 python -m src.nlp.scorer --dry-run --limit 3
 
-# Bake-off: sample, hand-label data/eval/goldset.jsonl, then compare models
+# Bake-off: sample, hand-label data/eval/goldset.jsonl (read bodies in the DB),
+# then compare models (run re-fetches each referenced body from the DB)
 python -m src.nlp.eval sample --n 30
 python -m src.nlp.eval run --k 2
 

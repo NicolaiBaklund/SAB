@@ -169,4 +169,7 @@ class IdunClient:
             retry_after = response.headers.get("retry-after")
             if retry_after and retry_after.isdigit():
                 return float(retry_after)
-        return min(2.0 * (2 ** attempt), 60.0)
+        # Standard exponential backoff: attempt 0 -> 1s, 1 -> 2s, 2 -> 4s (the
+        # longest wait, since max_retries defaults to 3). Capped at 60s so a
+        # higher max_retries can't produce an unbounded sleep.
+        return min(float(2 ** attempt), 60.0)
