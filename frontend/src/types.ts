@@ -55,3 +55,20 @@ export type Pagination = {
   offset: number;
 };
 
+export type SentimentPoint = {
+  date: string; // ISO day, e.g. "2026-06-01"
+  mean: number; // mean score of articles published that day
+  rolling: number; // article-weighted mean over the trailing window
+  count: number; // scored articles that day
+};
+
+export type SentimentSeries = {
+  ticker: string;
+  points: SentimentPoint[];
+};
+
+export type SentimentTimeseriesResponse = {
+  window_days: number;
+  series: SentimentSeries[];
+};
+

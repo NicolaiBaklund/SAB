@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.review import router as review_router
+from src.api.sentiment import router as sentiment_router
 from src.settings import get_settings
 
 
@@ -16,6 +17,7 @@ app.add_middleware(
 )
 
 app.include_router(review_router)
+app.include_router(sentiment_router)
 
 
 @app.get("/api/health")

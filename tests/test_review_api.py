@@ -198,6 +198,61 @@ async def test_label_and_scored_filters_use_selected_latest_sentiment(
 
 
 @pytest.mark.asyncio
+async def test_label_filter_paginates_in_sql(session: AsyncSession):
+    """A label match buried behind newer non-matching articles must appear on
+    page 1, and total must count only matching URLs (regression: label was
+    filtered after pagination, leaving early pages empty)."""
+    for i in range(3):
+        negative = await add_article(
+            session,
+            ticker="MOWI",
+            url=f"https://example.com/negative-{i}",
+            published=dt(f"2026-06-0{i + 2}T10:00:00"),
+        )
+        await add_sentiment(session, negative, score=-1.0, label="negative")
+    positive = await add_article(
+        session,
+        ticker="MOWI",
+        url="https://example.com/old-positive",
+        published=dt("2026-06-01T10:00:00"),
+    )
+    await add_sentiment(session, positive, score=1.0, label="positive")
+    await session.commit()
+
+    payload = await list_review_articles(
+        session, ReviewFilters(label="positive"), limit=2, offset=0
+    )
+
+    assert payload["total"] == 1
+    assert [item["url"] for item in payload["items"]] == [
+        "https://example.com/old-positive"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_label_filter_uses_latest_sentiment_in_sql(session: AsyncSession):
+    """An article re-scored from positive to negative no longer matches
+    label=positive — only the latest row per article counts."""
+    article = await add_article(
+        session, ticker="MOWI", url="https://example.com/rescored"
+    )
+    await add_sentiment(
+        session, article, score=1.0, label="positive",
+        scored_at=dt("2026-06-09T10:00:00"),
+    )
+    await add_sentiment(
+        session, article, score=-1.0, label="negative",
+        scored_at=dt("2026-06-09T12:00:00"),
+    )
+    await session.commit()
+
+    payload = await list_review_articles(session, ReviewFilters(label="positive"))
+
+    assert payload["total"] == 0
+    assert payload["items"] == []
+
+
+@pytest.mark.asyncio
 async def test_date_filter_excludes_null_published_when_active(session: AsyncSession):
     await add_article(
         session,
@@ -277,4 +332,28 @@ async def test_filter_options(session: AsyncSession):
         "labels": ["positive"],
         "models": ["model-a"],
     }
+
+
+@pytest.mark.asyncio
+async def test_filter_options_exclude_inactive_ticker_sources(session: AsyncSession):
+    article = await add_article(
+        session,
+        ticker="MOWI",
+        source="newsweb",
+        url="https://example.com/active",
+    )
+    await add_sentiment(session, article, score=0.7, label="positive", model="model-a")
+    # ZZZZ is not in companies.json, so it counts as inactive.
+    await add_article(
+        session,
+        ticker="ZZZZ",
+        source="oldwire",
+        url="https://example.com/inactive",
+    )
+    await session.commit()
+
+    payload = await get_review_filter_options(session)
+
+    assert payload["tickers"] == ["MOWI"]
+    assert payload["sources"] == ["newsweb"]
 

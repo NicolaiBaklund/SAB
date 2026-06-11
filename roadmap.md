@@ -18,7 +18,8 @@ Build a sentiment analysis and financial-analysis pipeline for Norwegian salmon/
 - `alembic/` — migration tooling; initial migration creates both tables, a second swaps `articles` uniqueness from `url` to `(ticker, url)`
 - `data/` — SQLite DB lives here (gitignored, created by `alembic upgrade head`)
 - `frontend/` — React + Vite review dashboard (read-only article/sentiment review with filters and pagination); dark/light theming with a VS Code-style dark palette and bright cyan accents (`src/styles.css`), theme preference persisted in `localStorage`; SVG terminal-prompt logo (`public/favicon.svg`) used in the sidebar brand and as the favicon
-- `src/nlp/` — sentiment scoring stack (Phase 2.1): `prompt.py` (versioned, deterministic price-impact template + JSON parser), `client.py` (rate-limited IDUN OpenAI-compatible client, guided JSON on by default + self-heal), `scorer.py` (scores unscored `(article, ticker)` rows → `sentiment` table; `--dry-run` prints the reconstructed prompt), `eval.py` (model bake-off: gold-set sampler + accuracy/macro-F1/self-consistency/κ metrics). See `docs/sentiment.md`. **Built, unit-tested, and the bake-off has chosen Mistral-Large-3-675B; the first full scoring run over the stored articles is still pending.**
+- **Sentiment page** (`frontend/src/pages/SentimentPage.tsx` + `src/api/sentiment.py`) — Plotly time-series of predicted sentiment per active company: daily mean (dots) + 7-day article-weighted rolling mean (line), combined view with company checkboxes or per-company small multiples; `off_topic` scores excluded; Plotly loaded lazily so other pages don't pay for the bundle. Empty until the first scoring run.
+- `src/nlp/` — sentiment scoring stack (Phase 2.1): `prompt.py` (versioned, deterministic price-impact template + JSON parser), `client.py` (rate-limited IDUN OpenAI-compatible client, guided JSON on by default + self-heal), `scorer.py` (scores unscored `(article, ticker)` rows of **active companies only** → `sentiment` table; `--dry-run` prints the reconstructed prompt), `eval.py` (model bake-off: gold-set sampler + accuracy/macro-F1/self-consistency/κ metrics). See `docs/sentiment.md`. **Built, unit-tested, and the bake-off has chosen Mistral-Large-3-675B; the first full scoring run over the stored articles is still pending.**
 - No price data or signals yet
 
 ## Companies (initial scope)
@@ -69,13 +70,13 @@ System is dynamic: companies defined in `companies.json`. Add/remove without cod
 | 1.3 | Newsweb (Oslo Børs) scraper (JSON API + httpx) | done |
 | 1.4 | Incremental fetch / dedup (+ documented cron scheduling) | done |
 | 1.5 | News RSS scraper (Google News RSS, per company) | done |
-| 2.1 | Sentiment scoring via IDUN (prompt + client + scorer + bake-off harness) | code done; model bake-off + first run pending |
-| 2.2 | Score storage (+ aggregation) | storage done (schema + scorer writes); aggregation pending |
+| 2.1 | Sentiment scoring via IDUN (prompt + client + scorer + bake-off harness) | code done; first run pending |
+| 2.2 | Score storage (+ aggregation) | storage done (schema + scorer writes); viz aggregation done (`/api/sentiment/timeseries`: daily mean + 7d rolling, request-time); signal aggregation pending |
 | 3.1 | Price data fetch (Yahoo Finance / Euronext) | not started |
 | 3.2 | Financial baseline analysis (returns, volatility, volume, fundamentals where available) | not started |
 | 3.3 | Sentiment–price / sentiment–financial baseline correlation analysis | not started |
 | 3.4 | Signal generation (financial baseline + rolling sentiment overlay) | not started |
-| 4.1 | Dashboard / visualization | in progress |
+| 4.1 | Dashboard / visualization | in progress (Review page + Sentiment time-series page done; Signals/Projections pages pending) |
 
 ## Data schema (SQLite)
 
@@ -118,6 +119,8 @@ scored_at       DATETIME
 - **Phase 2 audit constraint.** *Implemented (Phase 2.1):* `src/nlp/prompt.py` builds the model input *only* from the stored `title` + `body` plus per-ticker framing (no fetch/enrichment at score time), as a deterministic versioned template; `sentiment.prompt_version` records which template produced each score, so the GUI can reconstruct the exact input. `--dry-run` prints it.
 - **Financial analysis baseline before signals.** Sentiment should not be the whole strategy. Add a reusable financial context layer (price history, returns, volatility, volume, valuation/fundamental metrics where available, earnings dates, and salmon-sector indicators if accessible), then measure whether sentiment improves that baseline.
 - **Review page scoped to active companies.** *Resolved:* `src/api/review.py` restricts the article listing, per-article sentiment bubbles, and the Company filter dropdown to tickers marked `active` in `companies.json` (intersected with what's actually in the DB), so rows for inactive/delisted tickers no longer surface in the GUI.
+- **`off_topic` rows excluded from viz/analytics but kept in the DB.** The Sentiment page (and any future analytics) drops `relevance = off_topic` scores — they are keyword false matches, not signal. The rows are deliberately **not deleted**: scraper dedup works against stored `(ticker, url)` rows, so deleting them would just re-collect (and re-score) the same articles on the next incremental run. See `docs/sentiment.md` "Visualization".
+- **Sentiment page is empty until the first scoring run** (`python -m src.nlp.scorer`, off-peak). The page shows an explicit empty-state message until then.
 - IDUN off-peak scheduling important given 20 req/min limit
 
 ## Tech stack
@@ -132,4 +135,5 @@ scored_at       DATETIME
 | Attachments | `markitdown[pdf]` | convert PDF announcements to text for scoring |
 | Scheduling | OS cron / Task Scheduler | run `--incremental` off-peak; no in-process daemon |
 | NLP | IDUN (OpenAI-compatible) via `httpx`; model chosen by bake-off | free; Norwegian-capable; no extra SDK dependency |
+| Charts | Plotly (`plotly.js-basic-dist-min` + thin React wrapper) | basic dist covers line/scatter at a fraction of the full bundle; `react-plotly.js` unmaintained vs React 19 |
 | Config | `companies.json` | dynamic, no code change to add company |

@@ -80,7 +80,9 @@ No fan-out at score time.
 
 ## Scoring is checkpointed and resumable
 
-"Unscored" means "no `sentiment` row for this `model`", so a run only ever picks up
+"Unscored" means "no `sentiment` row for this `model`", restricted to companies
+marked `active` in `companies.json` — inactive tickers' rows are skipped so IDUN
+budget isn't spent on data the dashboard never shows. A run only ever picks up
 what is still missing. To make that resumability real on a ~33-minute full run, the
 scorer commits every 25 rows rather than once at the end: a crash, `SIGINT`, or
 timeout mid-batch loses at most the handful of rows since the last checkpoint — not
@@ -171,7 +173,7 @@ needed. Run off-peak (18:00–06:00 / weekends).
 |----------------------|-----------------------------------------------------------|
 | `src/nlp/prompt.py`  | versioned template, `build_messages`, `parse_response`    |
 | `src/nlp/client.py`  | rate-limited IDUN HTTP client + retries                   |
-| `src/nlp/scorer.py`  | score unscored rows → write `sentiment`; CLI + `--dry-run`|
+| `src/nlp/scorer.py`  | score unscored active-company rows → write `sentiment`; CLI + `--dry-run`|
 | `src/nlp/eval.py`    | model bake-off: gold-set sampler + metrics                |
 
 ## Commands
@@ -189,12 +191,33 @@ python -m src.nlp.eval run --k 2
 python -m src.nlp.scorer
 ```
 
+## Visualization (dashboard Sentiment page)
+
+`GET /api/sentiment/timeseries` (`src/api/sentiment.py`) feeds the dashboard's
+Sentiment page (Plotly): per active ticker, a daily mean score plus a trailing
+**7-day article-weighted rolling mean** (mean of every score in the window, not
+a mean of daily means). The GUI offers a combined chart with per-company
+filtering and a per-company small-multiples view.
+
+Aggregation rules:
+
+- Only companies marked `active` in `companies.json` (queried at request time —
+  nothing hardcoded).
+- Only the **latest** sentiment row per article (re-scores supersede older rows).
+- **`relevance = off_topic` rows are excluded from visualization and analytics.**
+  They are keyword false matches, not signal about the company. The article and
+  sentiment rows **stay in the DB** on purpose: the scrapers dedup against stored
+  `(ticker, url)` rows, so deleting them would just cause the same articles to be
+  re-collected (and re-scored) on the next incremental run.
+- Articles without a `published` date are skipped (no place on the time axis).
+
 ## Known gaps / next steps
 
 - **Cross-source dedup** (same event in Newsweb *and* Google News under different
   URLs) is still not handled — it would be scored once per source. Best addressed
   here at scoring/aggregation time via fuzzy match on ticker + title + date.
-- **Aggregation** (rolling per-ticker sentiment over a window) is Phase 2.2 / 3.
+- **Aggregation** for *signals* (Phase 3) is still open; the timeseries endpoint
+  above aggregates at request time for visualization only (nothing persisted).
 - **Prompt language**: instructions are English, article content stays Norwegian.
   If the NorwAI model underperforms in the bake-off, A/B a Norwegian-instruction
   variant (bump `PROMPT_VERSION`).

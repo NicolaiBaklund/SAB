@@ -1,8 +1,8 @@
-<svg width="1100" height="360" viewBox="0 0 1100 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+<svg width="1100" height="420" viewBox="0 0 1100 420" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">SAB pipeline overview</title>
-  <desc id="desc">A visual overview of the SAB data flow from news sources through SQLite, review dashboard, scoring, financial analysis, and future trading signals.</desc>
-  <rect width="1100" height="360" rx="18" fill="#1e1e1e"/>
-  <rect x="1" y="1" width="1098" height="358" rx="17" stroke="#333333"/>
+  <desc id="desc">A visual overview of the SAB data flow from news sources through scrapers into SQLite, the IDUN sentiment scorer reading and writing back, the dashboard with review and sentiment pages, and future financial baseline and trading signals.</desc>
+  <rect width="1100" height="420" rx="18" fill="#1e1e1e"/>
+  <rect x="1" y="1" width="1098" height="418" rx="17" stroke="#333333"/>
   <text x="48" y="62" fill="#d4d4d4" font-family="Segoe UI, Arial, sans-serif" font-size="30" font-weight="700">SAB data flow</text>
   <text x="48" y="94" fill="#858585" font-family="Segoe UI, Arial, sans-serif" font-size="15">Sentiment Analysis Bot turns company news into auditable sentiment, then trading signals.</text>
 
@@ -32,17 +32,28 @@
     <path d="M816 181L830 191L816 201" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
 
     <rect x="846" y="145" width="206" height="92" rx="10" fill="#252526" stroke="#333333"/>
-    <text x="868" y="179" fill="#4fc3f7" font-size="17" font-weight="700">Dashboard now</text>
-    <text x="868" y="207" fill="#d4d4d4" font-size="14">Review articles</text>
-    <text x="868" y="227" fill="#d4d4d4" font-size="14">Audit model input</text>
+    <text x="868" y="179" fill="#4fc3f7" font-size="17" font-weight="700">Dashboard</text>
+    <text x="868" y="207" fill="#d4d4d4" font-size="14">Review + audit input</text>
+    <text x="868" y="227" fill="#d4d4d4" font-size="14">Sentiment charts</text>
+
+    <!-- Scorer loop: reads unscored articles from SQLite, writes sentiment back -->
+    <path d="M630 237V268" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round"/>
+    <path d="M620 260L630 274L640 260" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M705 274V243" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round"/>
+    <path d="M695 251L705 237L715 251" stroke="#4fc3f7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <rect x="580" y="280" width="175" height="92" rx="10" fill="#252526" stroke="#333333"/>
+    <text x="602" y="314" fill="#4fc3f7" font-size="17" font-weight="700">IDUN scorer</text>
+    <text x="602" y="342" fill="#d4d4d4" font-size="14">Price-impact LLM</text>
+    <text x="602" y="362" fill="#d4d4d4" font-size="14">per company</text>
   </g>
 
   <g font-family="Segoe UI, Arial, sans-serif">
-    <rect x="580" y="274" width="214" height="44" rx="22" fill="#252526" stroke="#333333"/>
-    <text x="606" y="302" fill="#858585" font-size="14">Next: scoring + financial baseline</text>
-    <path d="M808 296H850" stroke="#858585" stroke-width="2.5" stroke-linecap="round"/>
-    <path d="M842 288L852 296L842 304" stroke="#858585" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <rect x="866" y="274" width="186" height="44" rx="22" fill="#252526" stroke="#333333"/>
-    <text x="892" y="302" fill="#858585" font-size="14">Then: combined signals</text>
+    <rect x="48" y="300" width="246" height="44" rx="22" fill="#252526" stroke="#333333"/>
+    <text x="74" y="328" fill="#858585" font-size="14">Next: price data + financial baseline</text>
+    <path d="M308 322H350" stroke="#858585" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M342 314L352 322L342 330" stroke="#858585" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="366" y="300" width="186" height="44" rx="22" fill="#252526" stroke="#333333"/>
+    <text x="392" y="328" fill="#858585" font-size="14">Then: combined signals</text>
   </g>
 </svg>

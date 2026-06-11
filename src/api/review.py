@@ -2,30 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import AsyncIterator, Literal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.config import get_active_companies
-from src.data.db import get_db
+from src.api._utils import _active_tickers, _latest_sentiment, get_session
 from src.data.models import Article, Sentiment
 
 ScoreState = Literal["scored", "unscored"]
 
 router = APIRouter(prefix="/api/review", tags=["review"])
-
-
-def _active_tickers() -> set[str]:
-    """Tickers of companies marked active in companies.json."""
-    return {company["ticker"] for company in get_active_companies()}
-
-
-async def get_session() -> AsyncIterator[AsyncSession]:
-    async with get_db() as session:
-        yield session
 
 
 @dataclass(frozen=True)
@@ -40,15 +29,6 @@ class ReviewFilters:
     q: str | None = None
 
 
-def _latest_sentiment(article: Article, model: str | None = None) -> Sentiment | None:
-    rows = article.sentiment
-    if model:
-        rows = [row for row in rows if row.model == model]
-    if not rows:
-        return None
-    return max(rows, key=lambda row: (row.scored_at, row.id or 0))
-
-
 def _sentiment_payload(sentiment: Sentiment | None) -> dict[str, object] | None:
     if sentiment is None:
         return None
@@ -58,34 +38,6 @@ def _sentiment_payload(sentiment: Sentiment | None) -> dict[str, object] | None:
         "model": sentiment.model,
         "scored_at": sentiment.scored_at,
     }
-
-
-def _matches_filters(article: Article, filters: ReviewFilters) -> bool:
-    sentiment = _latest_sentiment(article, filters.model)
-
-    if filters.ticker and article.ticker != filters.ticker:
-        return False
-    if filters.source and article.source != filters.source:
-        return False
-    if filters.label and (sentiment is None or sentiment.label != filters.label):
-        return False
-    if filters.score_state == "scored" and sentiment is None:
-        return False
-    if filters.score_state == "unscored" and sentiment is not None:
-        return False
-    if filters.published_from or filters.published_to:
-        if article.published is None:
-            return False
-        published_day = article.published.date()
-        if filters.published_from and published_day < filters.published_from:
-            return False
-        if filters.published_to and published_day > filters.published_to:
-            return False
-    if filters.q:
-        title = article.title or ""
-        if filters.q.casefold() not in title.casefold():
-            return False
-    return True
 
 
 def _article_sort_values(rows: list[Article]) -> tuple[bool, datetime, datetime]:
@@ -120,8 +72,29 @@ def _article_payload(rows: list[Article], model: str | None) -> dict[str, object
     }
 
 
+def _latest_label_sql(model: str | None):
+    """Label of an article's latest sentiment row, as a correlated subquery.
+
+    Must mirror :func:`_latest_sentiment` (used for display): newest ``scored_at``
+    wins, ``id`` breaks ties, optionally scoped to one model.
+    """
+    stmt = (
+        select(Sentiment.label)
+        .where(Sentiment.article_id == Article.id)
+        .order_by(Sentiment.scored_at.desc(), Sentiment.id.desc())
+        .limit(1)
+    )
+    if model:
+        stmt = stmt.where(Sentiment.model == model)
+    return stmt.scalar_subquery()
+
+
 def _apply_sql_filters(stmt, filters: ReviewFilters):
-    """Apply SQL-eligible filter conditions (ticker, source, published, q)."""
+    """Apply every filter as SQL so pagination and total stay exact.
+
+    label/score_state are evaluated against the latest sentiment per article
+    (scoped to the model filter when set), matching what the payload displays.
+    """
     if filters.ticker:
         stmt = stmt.where(Article.ticker == filters.ticker)
     if filters.source:
@@ -132,6 +105,15 @@ def _apply_sql_filters(stmt, filters: ReviewFilters):
         stmt = stmt.where(func.date(Article.published) <= filters.published_to)
     if filters.q:
         stmt = stmt.where(func.lower(Article.title).like(f"%{filters.q.lower()}%"))
+    if filters.label:
+        stmt = stmt.where(_latest_label_sql(filters.model) == filters.label)
+    if filters.score_state:
+        scored = select(Sentiment.id).where(Sentiment.article_id == Article.id)
+        if filters.model:
+            scored = scored.where(Sentiment.model == filters.model)
+        stmt = stmt.where(
+            scored.exists() if filters.score_state == "scored" else ~scored.exists()
+        )
     return stmt
 
 
@@ -152,6 +134,9 @@ async def list_review_articles(
     # sort after dated ones without an explicit NULLS LAST clause.
     # Only active companies (companies.json) are reviewed, so rows for inactive
     # tickers are excluded before grouping, counting, and paginating.
+    # Filters apply per article row before GROUP BY, so a URL is kept when *any*
+    # of its (ticker, url) rows matches — a multi-company article surfaces if at
+    # least one of its companies passes the filter.
     url_page_stmt = _apply_sql_filters(
         select(Article.url)
         .where(Article.ticker.in_(active_tickers))
@@ -191,18 +176,9 @@ async def list_review_articles(
     for article in articles_result.scalars().all():
         by_url.setdefault(article.url, []).append(article)
 
-    # Step 3: Apply Python-only filters (label, score_state require loaded sentiments).
-    # SQL total counts URLs matching the SQL filters; pages may be shorter when
-    # sentiment filters further reduce results.
-    has_python_filters = bool(filters.label or filters.score_state)
-    items = []
-    for url in page_urls:
-        rows = by_url.get(url, [])
-        if not rows:
-            continue
-        if has_python_filters and not any(_matches_filters(a, filters) for a in rows):
-            continue
-        items.append(_article_payload(rows, filters.model))
+    items = [
+        _article_payload(by_url[url], filters.model) for url in page_urls if url in by_url
+    ]
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
@@ -215,7 +191,9 @@ async def get_review_filter_options(session: AsyncSession) -> dict[str, list[str
         .order_by(Article.ticker)
     )
     sources_result = await session.execute(
-        select(distinct(Article.source)).order_by(Article.source)
+        select(distinct(Article.source))
+        .where(Article.ticker.in_(active_tickers))
+        .order_by(Article.source)
     )
     labels_result = await session.execute(
         select(distinct(Sentiment.label)).order_by(Sentiment.label)

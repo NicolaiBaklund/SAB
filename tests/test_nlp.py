@@ -303,6 +303,28 @@ async def test_score_writes_rows_and_is_model_scoped(session, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_score_only_scores_active_companies(session, monkeypatch):
+    monkeypatch.setattr(scorer, "load_companies",
+                        lambda: [{"ticker": "MOWI", "name": "Mowi ASA"},
+                                 {"ticker": "NRS", "name": "Norway Royal Salmon"}])
+    monkeypatch.setattr(scorer, "get_active_companies",
+                        lambda: [{"ticker": "MOWI", "name": "Mowi ASA"}])
+    session.add_all([
+        Article(ticker="MOWI", source="gnews", url="u1", title="t1", body="b1",
+                fetched_at=datetime(2026, 6, 9)),
+        Article(ticker="NRS", source="gnews", url="u2", title="t2", body="b2",
+                fetched_at=datetime(2026, 6, 9)),
+    ])
+    await session.flush()
+
+    client = FakeClient("m", ['{"label":"positive","relevance":"direct"}'])
+    assert await scorer.score(client, session, now=datetime(2026, 6, 9)) == 1
+
+    rows = list((await session.execute(select(Sentiment))).scalars())
+    assert len(rows) == 1 and client.calls == 1  # NRS row left untouched
+
+
+@pytest.mark.asyncio
 async def test_score_skips_failed_rows(session, monkeypatch):
     monkeypatch.setattr(scorer, "load_companies",
                         lambda: [{"ticker": "SALM", "name": "SalMar ASA"}])

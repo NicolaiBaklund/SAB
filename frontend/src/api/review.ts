@@ -75,7 +75,7 @@ export function formatRequestError(status: number, body: unknown): string {
   return detail ? `Request failed: ${status}: ${detail}` : `Request failed: ${status}`;
 }
 
-async function getJson<T>(url: string): Promise<T> {
+export async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
   if (!response.ok) {
     let body: unknown = null;

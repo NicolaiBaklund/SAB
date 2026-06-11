@@ -1,9 +1,14 @@
+<p align="center">
+  <img src="frontend/public/favicon.svg" width="88" alt="SAB logo" />
+</p>
+
 # SAB
 
 [![pytest](https://github.com/NicolaiBaklund/SAB/actions/workflows/pytest.yml/badge.svg?branch=main)](https://github.com/NicolaiBaklund/SAB/actions/workflows/pytest.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-3776ab)
 ![FastAPI](https://img.shields.io/badge/api-FastAPI-009688)
 ![React](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61dafb)
+![Plotly](https://img.shields.io/badge/charts-Plotly-3f4f75)
 ![SQLite](https://img.shields.io/badge/storage-SQLite-003b57)
 
 SAB is a **Sentiment Analysis Bot** for Norwegian stock research. It collects
@@ -15,23 +20,35 @@ generation.
 
 ## Current Stage
 
-SAB currently has the data foundation and first dashboard view in place.
+SAB currently has the data foundation, the sentiment scoring stack, and two
+dashboard views in place.
 
 - **Company registry:** `companies.json` defines the active companies, keywords,
   and Newsweb issuer ids. The system reads this dynamically; companies are not
-  hardcoded in the dashboard.
+  hardcoded in the dashboard, scorer, or charts.
 - **News ingestion:** `src/data/newsweb.py` fetches Oslo Bors Newsweb
   announcements, including PDF attachment text via `markitdown`.
 - **RSS ingestion:** `src/data/rss.py` fetches Google News RSS results per active
   company and stores one article row per matched company.
 - **Database:** SQLAlchemy async models store `articles` and `sentiment` rows in
   SQLite, managed by Alembic migrations.
+- **Sentiment scoring:** `src/nlp/` scores each active-company article's price
+  impact per ticker via IDUN (model chosen by bake-off); off-topic keyword
+  matches are flagged and excluded from analytics (see `docs/sentiment.md`).
 - **Review dashboard:** FastAPI serves read-only review data to a React/Vite
   frontend. The review page groups article rows by URL, shows source, company
   bubbles, sentiment or explicit unscored state, filters, pagination, and the
   reconstructed model input from stored title/body.
+- **Sentiment page:** Plotly time-series of predicted sentiment per active
+  company — daily mean (dots) plus a 7-day rolling mean (line), as a combined
+  chart with company filtering or per-company panels.
 
-![Article review dashboard preview](docs/assets/readme-dashboard.svg)
+![Article review page](docs/assets/review-page.png)
+
+![Sentiment over time page](docs/assets/sentiment-page.png)
+
+*Screenshots use sample scores for preview; real scores come from the IDUN
+scoring run.*
 
 ## What Works Today
 
@@ -43,7 +60,8 @@ SAB currently has the data foundation and first dashboard view in place.
 | Google News RSS scraper | Done |
 | Incremental fetch workflow | Done |
 | Read-only article review dashboard | Done |
-| IDUN sentiment scoring | Built (`src/nlp/`); model bake-off + first run pending — see `docs/sentiment.md` |
+| Sentiment-over-time dashboard (Plotly) | Done |
+| IDUN sentiment scoring | Built (`src/nlp/`, active companies only); bake-off chose Mistral-Large-3-675B; first full run pending — see `docs/sentiment.md` |
 | Financial analysis baseline | Planned |
 | Price data and sentiment correlation | Planned |
 | Trading signal generation | Planned |
@@ -104,7 +122,8 @@ npm run dev
 Open:
 
 ```text
-http://localhost:5173/review
+http://localhost:5173/review     — article review
+http://localhost:5173/sentiment  — sentiment over time
 ```
 
 ## Development Checks
@@ -132,10 +151,10 @@ npm run build
      matches, and stored model input.
    - Tighten company keywords in `companies.json` as data quality issues appear.
 
-2. **Add sentiment scoring**
-   - Implement the IDUN/NorwAI scorer against stored `title` and `body` only.
-   - Score sentiment per company/ticker, not per article as a whole.
-   - Store `score`, `label`, `model`, and `scored_at` in the `sentiment` table.
+2. **Add sentiment scoring** — built (`src/nlp/`); first full scoring run pending
+   - Scores stored `title` and `body` only, per company/ticker (active companies
+     only), and writes `score`, `label`, `relevance`, `model`, and `scored_at`
+     to the `sentiment` table.
 
 3. **Add financial analysis as the signal baseline**
    - Add company-level financial metrics such as price history, returns,
@@ -153,7 +172,7 @@ npm run build
      windows.
 
 5. **Generate signals and expand dashboard views**
-   - Add sentiment-over-time charts.
+   - ~~Add sentiment-over-time charts.~~ Done — see the Sentiment page.
    - Add price overlays.
    - Add financial-analysis, signal, and projection views beside the review page.
 

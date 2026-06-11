@@ -1,19 +1,29 @@
 import { BarChart3, Database, LineChart, RadioTower } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { ReviewPage } from "./pages/ReviewPage";
 import { getInitialTheme, storeTheme, type ThemeName } from "./theme";
 import { ThemeToggle } from "./components/ThemeToggle";
 
+// Lazy: SentimentPage pulls in the Plotly bundle (~1MB), which the other
+// pages shouldn't have to download.
+const SentimentPage = lazy(() =>
+  import("./pages/SentimentPage").then((module) => ({ default: module.SentimentPage })),
+);
+
 const navItems = [
   { label: "Review", href: "/review", icon: Database, enabled: true },
-  { label: "Sentiment", href: "/sentiment", icon: BarChart3, enabled: false },
+  { label: "Sentiment", href: "/sentiment", icon: BarChart3, enabled: true },
   { label: "Signals", href: "/signals", icon: RadioTower, enabled: false },
   { label: "Projections", href: "/projections", icon: LineChart, enabled: false },
 ];
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeName>(() => getInitialTheme());
+  // Navigation is plain <a> links (full page loads), so the pathname is fixed
+  // for the lifetime of the component and safe to read once.
+  const pathname = window.location.pathname;
+  const isSentimentPage = pathname === "/sentiment";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -21,7 +31,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    if (window.location.pathname === "/") {
+    if (pathname === "/") {
       window.history.replaceState(null, "", "/review");
     }
   }, []);
@@ -39,7 +49,7 @@ export default function App() {
         <nav className="nav-list" aria-label="Dashboard views">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = window.location.pathname === item.href;
+            const active = pathname === item.href;
             return item.enabled ? (
               <a
                 className={`nav-item ${active ? "nav-item--active" : ""}`}
@@ -62,14 +72,20 @@ export default function App() {
       <main className="main-panel">
         <header className="topbar">
           <div>
-            <h1>Article Review</h1>
+            <h1>{isSentimentPage ? "Sentiment" : "Article Review"}</h1>
           </div>
           <ThemeToggle
             theme={theme}
             onToggle={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
           />
         </header>
-        <ReviewPage />
+        {isSentimentPage ? (
+          <Suspense fallback={<div className="status">Loading</div>}>
+            <SentimentPage theme={theme} />
+          </Suspense>
+        ) : (
+          <ReviewPage />
+        )}
       </main>
     </div>
   );
