@@ -1,5 +1,5 @@
-from datetime import datetime
-from sqlalchemy import Integer, Text, Float, DateTime, ForeignKey, UniqueConstraint
+from datetime import date, datetime
+from sqlalchemy import Integer, Text, Float, Date, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -47,3 +47,28 @@ class Sentiment(Base):
     scored_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
     article: Mapped["Article"] = relationship(back_populates="sentiment")
+
+
+class Price(Base):
+    __tablename__ = "prices"
+
+    # One daily OHLCV bar per company per trading day. Rows are *upserted*, not
+    # insert-only: a bar fetched intraday is partial (close = last trade so far)
+    # and the source revises `adj_close` retroactively on dividends/splits, so
+    # re-runs must overwrite. See src/data/prices.py.
+    __table_args__ = (UniqueConstraint("ticker", "date", name="uq_prices_ticker_date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    ticker: Mapped[str] = mapped_column(Text, nullable=False)  # company ticker (MOWI), not the source symbol (MOWI.OL)
+    date: Mapped[date] = mapped_column(Date, nullable=False)  # trading day, exchange-local
+    open: Mapped[float | None] = mapped_column(Float)
+    high: Mapped[float | None] = mapped_column(Float)
+    low: Mapped[float | None] = mapped_column(Float)
+    close: Mapped[float] = mapped_column(Float, nullable=False)
+    # Dividend/split-adjusted close — use this for returns and technical
+    # indicators across corporate actions; raw `close` is what traded that day.
+    adj_close: Mapped[float | None] = mapped_column(Float)
+    volume: Mapped[int | None] = mapped_column(Integer)
+    currency: Mapped[str | None] = mapped_column(Text)  # e.g. NOK (from source metadata)
+    source: Mapped[str] = mapped_column(Text, nullable=False)  # yahoo
+    fetched_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)

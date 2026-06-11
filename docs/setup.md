@@ -45,7 +45,10 @@ python -m src.data.newsweb --backfill
 # 2. Fetch news about all active companies via Google News RSS
 python -m src.data.rss --backfill
 
-# 3. Score unscored articles (Phase 2) — see "Sentiment scoring" below
+# 3. Fetch last 2 years of daily prices for all active companies (Phase 3.1)
+python -m src.data.prices --backfill
+
+# 4. Score unscored articles (Phase 2) — see "Sentiment scoring" below
 python -m src.nlp.scorer
 ```
 
@@ -76,6 +79,7 @@ After the initial backfill, fetch only new announcements:
 ```bash
 python -m src.data.newsweb --incremental   # Oslo Børs announcements
 python -m src.data.rss --incremental        # Google News (same fetch as --backfill)
+python -m src.data.prices --incremental     # daily price bars (recent tail)
 ```
 
 Newsweb fetches from each ticker's most-recent stored announcement forward.
@@ -83,6 +87,11 @@ For RSS, `--incremental` and `--backfill` do the same fetch — a feed only expo
 its current window, so there is no historical backfill; both flags exist for cron
 parity. Deduplication (URL for Newsweb, `(ticker, url)` for RSS) makes both safe
 to run repeatedly.
+
+Prices re-fetch a few days past each ticker's last stored bar and *upsert* on
+`(ticker, date)`, so partial intraday bars and late corrections are overwritten
+on the next run. Run a monthly `--backfill` as well to refresh the
+dividend/split-adjusted `adj_close` history (see `docs/data-sources.md`).
 
 ## Dashboard
 
@@ -111,10 +120,15 @@ daemon ships with the project):
   ```cron
   0 3 * * *  cd /path/to/SAB && .venv/bin/python -m src.data.newsweb --incremental
   5 3 * * *  cd /path/to/SAB && .venv/bin/python -m src.data.rss --incremental
+  10 3 * * *  cd /path/to/SAB && .venv/bin/python -m src.data.prices --incremental
+  15 3 1 * *  cd /path/to/SAB && .venv/bin/python -m src.data.prices --backfill
   ```
+  (the monthly `--backfill` refreshes the dividend-adjusted `adj_close` history)
 - **Windows (Task Scheduler)** — daily triggers running
-  `…\.venv\Scripts\python.exe -m src.data.newsweb --incremental` and
-  `…\.venv\Scripts\python.exe -m src.data.rss --incremental` in the repo dir.
+  `…\.venv\Scripts\python.exe -m src.data.newsweb --incremental`,
+  `…\.venv\Scripts\python.exe -m src.data.rss --incremental` and
+  `…\.venv\Scripts\python.exe -m src.data.prices --incremental` in the repo dir,
+  plus a monthly `… -m src.data.prices --backfill`.
 
 ## Adding a Company
 
@@ -145,3 +159,7 @@ print({m['issuerSign']: m['issuerId'] for m in ms if m['issuerSign']=='XXXX'})"
 
 A company without `newsweb_issuer_id` is simply skipped by the Newsweb scraper
 (logged as a warning); no code changes are needed.
+
+The price fetcher derives the Yahoo Finance symbol as `<ticker>.OL` (Oslo Børs).
+If a company's Yahoo symbol differs from that, add an optional `price_symbol`
+field (e.g. `"price_symbol": "XXXX.CO"`); no code changes are needed.
