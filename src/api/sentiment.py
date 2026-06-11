@@ -37,22 +37,28 @@ def _series_points(scores_by_day: dict[date, list[float]]) -> list[dict[str, obj
     are emitted.
     """
     days = sorted(scores_by_day)
+    day_sums = [sum(scores_by_day[day]) for day in days]
+    day_counts = [len(scores_by_day[day]) for day in days]
     points: list[dict[str, object]] = []
-    for day in days:
-        scores = scores_by_day[day]
+    # Sliding window over the sorted days: `start` only moves forward, so the
+    # whole loop is O(D) instead of rescanning all days per point.
+    start = 0
+    window_sum = 0.0
+    window_count = 0
+    for i, day in enumerate(days):
+        window_sum += day_sums[i]
+        window_count += day_counts[i]
         window_start = day - timedelta(days=ROLLING_WINDOW_DAYS - 1)
-        window_scores = [
-            score
-            for other_day in days
-            if window_start <= other_day <= day
-            for score in scores_by_day[other_day]
-        ]
+        while days[start] < window_start:
+            window_sum -= day_sums[start]
+            window_count -= day_counts[start]
+            start += 1
         points.append(
             {
                 "date": day.isoformat(),
-                "mean": sum(scores) / len(scores),
-                "rolling": sum(window_scores) / len(window_scores),
-                "count": len(scores),
+                "mean": day_sums[i] / day_counts[i],
+                "rolling": window_sum / window_count,
+                "count": day_counts[i],
             }
         )
     return points
