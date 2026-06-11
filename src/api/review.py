@@ -2,30 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import AsyncIterator, Literal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.config import get_active_companies
-from src.data.db import get_db
+from src.api._utils import _active_tickers, _latest_sentiment, get_session
 from src.data.models import Article, Sentiment
 
 ScoreState = Literal["scored", "unscored"]
 
 router = APIRouter(prefix="/api/review", tags=["review"])
-
-
-def _active_tickers() -> set[str]:
-    """Tickers of companies marked active in companies.json."""
-    return {company["ticker"] for company in get_active_companies()}
-
-
-async def get_session() -> AsyncIterator[AsyncSession]:
-    async with get_db() as session:
-        yield session
 
 
 @dataclass(frozen=True)
@@ -38,15 +27,6 @@ class ReviewFilters:
     published_from: date | None = None
     published_to: date | None = None
     q: str | None = None
-
-
-def _latest_sentiment(article: Article, model: str | None = None) -> Sentiment | None:
-    rows = article.sentiment
-    if model:
-        rows = [row for row in rows if row.model == model]
-    if not rows:
-        return None
-    return max(rows, key=lambda row: (row.scored_at, row.id or 0))
 
 
 def _sentiment_payload(sentiment: Sentiment | None) -> dict[str, object] | None:

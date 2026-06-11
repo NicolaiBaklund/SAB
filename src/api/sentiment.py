@@ -20,7 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from src.api.review import _active_tickers, _latest_sentiment, get_session
+from src.api._utils import _active_tickers, _latest_sentiment, get_session
 from src.data.models import Article
 
 ROLLING_WINDOW_DAYS = 7

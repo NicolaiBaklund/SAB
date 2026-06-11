@@ -52,6 +52,7 @@ SAB/
       eval.py           — model bake-off: gold-set sampler + metrics (Phase 2.1)
     api/
       main.py           — FastAPI app: CORS + router registration (dashboard API)
+      _utils.py         — helpers shared by review/sentiment routers (session dep, active tickers, latest sentiment)
       review.py         — /api/review: article/sentiment review listing + filters (Phase 4.1)
       sentiment.py      — /api/sentiment/timeseries: daily mean + 7d rolling per ticker (Phase 4.1)
     signals/
