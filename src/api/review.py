@@ -191,7 +191,9 @@ async def get_review_filter_options(session: AsyncSession) -> dict[str, list[str
         .order_by(Article.ticker)
     )
     sources_result = await session.execute(
-        select(distinct(Article.source)).order_by(Article.source)
+        select(distinct(Article.source))
+        .where(Article.ticker.in_(active_tickers))
+        .order_by(Article.source)
     )
     labels_result = await session.execute(
         select(distinct(Sentiment.label)).order_by(Sentiment.label)

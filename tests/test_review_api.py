@@ -333,3 +333,27 @@ async def test_filter_options(session: AsyncSession):
         "models": ["model-a"],
     }
 
+
+@pytest.mark.asyncio
+async def test_filter_options_exclude_inactive_ticker_sources(session: AsyncSession):
+    article = await add_article(
+        session,
+        ticker="MOWI",
+        source="newsweb",
+        url="https://example.com/active",
+    )
+    await add_sentiment(session, article, score=0.7, label="positive", model="model-a")
+    # ZZZZ is not in companies.json, so it counts as inactive.
+    await add_article(
+        session,
+        ticker="ZZZZ",
+        source="oldwire",
+        url="https://example.com/inactive",
+    )
+    await session.commit()
+
+    payload = await get_review_filter_options(session)
+
+    assert payload["tickers"] == ["MOWI"]
+    assert payload["sources"] == ["newsweb"]
+
