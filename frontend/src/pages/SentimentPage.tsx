@@ -58,19 +58,27 @@ export function buildSeriesTraces(
   ];
 }
 
-function cssVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
+// Mirrors the --text/--border/--border-strong values in styles.css. Reading
+// them via getComputedStyle would race the data-theme effect in App.tsx and
+// pick up the old theme's values during the toggle render.
+const CHART_COLORS: Record<ThemeName, { text: string; border: string; borderStrong: string }> = {
+  dark: { text: "#d7dbe3", border: "#2b2f3a", borderStrong: "#383d4a" },
+  light: { text: "#283442", border: "#dce2e9", borderStrong: "#c6cfd9" },
+};
 
-function chartLayout(title: string | undefined, height: number): Partial<Layout> {
-  const border = cssVar("--border");
+function chartLayout(
+  theme: ThemeName,
+  title: string | undefined,
+  height: number,
+): Partial<Layout> {
+  const { text, border, borderStrong } = CHART_COLORS[theme];
   return {
     title: title ? { text: title, font: { size: 13 } } : undefined,
     height,
     margin: { t: title ? 36 : 16, r: 16, b: 40, l: 40 },
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
-    font: { color: cssVar("--text"), family: "inherit", size: 12 },
+    font: { color: text, family: "inherit", size: 12 },
     showlegend: false,
     hovermode: "closest",
     xaxis: { gridcolor: border, linecolor: border },
@@ -79,7 +87,7 @@ function chartLayout(title: string | undefined, height: number): Partial<Layout>
       gridcolor: border,
       linecolor: border,
       zeroline: true,
-      zerolinecolor: cssVar("--border-strong"),
+      zerolinecolor: borderStrong,
     },
   };
 }
@@ -100,7 +108,6 @@ export function SentimentPage({ theme }: { theme: ThemeName }) {
 
   const series = data?.series ?? [];
   const windowDays = data?.window_days ?? 7;
-  const visibleSeries = series.filter((entry) => !hiddenTickers.has(entry.ticker));
   const hasAnyPoints = series.some((entry) => entry.points.length > 0);
 
   const combinedTraces = useMemo(
@@ -113,8 +120,25 @@ export function SentimentPage({ theme }: { theme: ThemeName }) {
     [series, hiddenTickers, windowDays],
   );
 
-  // Theme is the dependency so the chart restyles when CSS variables change.
-  const combinedLayout = useMemo(() => chartLayout(undefined, 420), [theme]);
+  const combinedLayout = useMemo(() => chartLayout(theme, undefined, 420), [theme]);
+
+  // Stable data/layout objects per panel so PlotlyChart only re-renders when
+  // the data, selection, or theme actually changes.
+  const companyPanels = useMemo(
+    () =>
+      series.flatMap((entry, index) =>
+        hiddenTickers.has(entry.ticker)
+          ? []
+          : [
+              {
+                ticker: entry.ticker,
+                data: buildSeriesTraces(entry, traceColor(index), windowDays),
+                layout: chartLayout(theme, entry.ticker, 260),
+              },
+            ],
+      ),
+    [series, hiddenTickers, windowDays, theme],
+  );
 
   function toggleTicker(ticker: string) {
     setHiddenTickers((current) => {
@@ -193,17 +217,11 @@ export function SentimentPage({ theme }: { theme: ThemeName }) {
 
       {data && hasAnyPoints && view === "per-company" ? (
         <div className="chart-grid">
-          {visibleSeries.map((entry) => {
-            const index = series.indexOf(entry);
-            return (
-              <div className="chart-panel" key={entry.ticker}>
-                <PlotlyChart
-                  data={buildSeriesTraces(entry, traceColor(index), windowDays)}
-                  layout={chartLayout(entry.ticker, 260)}
-                />
-              </div>
-            );
-          })}
+          {companyPanels.map((panel) => (
+            <div className="chart-panel" key={panel.ticker}>
+              <PlotlyChart data={panel.data} layout={panel.layout} />
+            </div>
+          ))}
         </div>
       ) : null}
     </section>
