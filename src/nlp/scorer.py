@@ -19,7 +19,8 @@ free: each row carries exactly one ticker, and the prompt judges sentiment towar
 
 ## Re-runnable and model-scoped
 
-"Unscored" means "no sentiment row with this ``model``". Re-running is therefore
+"Unscored" means "no sentiment row with this ``model``", restricted to companies
+marked active in ``companies.json``. Re-running is therefore
 safe and resumable: progress is committed every 25 rows (see :func:`score`), so a
 crash/SIGINT/timeout mid-batch loses at most the handful of in-flight rows since
 the last checkpoint — not the whole run — and they are simply rescored next time.
@@ -47,7 +48,7 @@ from datetime import datetime, timezone
 import httpx
 from sqlalchemy import select
 
-from src.config import load_companies
+from src.config import get_active_companies, load_companies
 from src.data.db import get_db
 from src.data.models import Article, Sentiment
 from src.nlp.client import IdunClient, RateLimiter
@@ -76,9 +77,19 @@ def _company_names() -> dict[str, str]:
 
 
 async def _unscored_articles(session, model: str, limit: int | None) -> list[Article]:
-    """Articles with no sentiment row for ``model``, oldest first."""
+    """Active-company articles with no sentiment row for ``model``, oldest first.
+
+    Inactive tickers are skipped: the dashboard only surfaces active companies,
+    so scoring their rows would spend IDUN budget on data nothing reads.
+    """
+    active = {company["ticker"] for company in get_active_companies()}
     scored = select(Sentiment.article_id).where(Sentiment.model == model)
-    stmt = select(Article).where(Article.id.notin_(scored)).order_by(Article.id)
+    stmt = (
+        select(Article)
+        .where(Article.ticker.in_(active))
+        .where(Article.id.notin_(scored))
+        .order_by(Article.id)
+    )
     if limit is not None:
         stmt = stmt.limit(limit)
     return list((await session.execute(stmt)).scalars())
