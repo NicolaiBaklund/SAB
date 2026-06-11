@@ -20,7 +20,10 @@ const navItems = [
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeName>(() => getInitialTheme());
-  const isSentimentPage = window.location.pathname === "/sentiment";
+  // Navigation is plain <a> links (full page loads), so the pathname is fixed
+  // for the lifetime of the component and safe to read once.
+  const pathname = window.location.pathname;
+  const isSentimentPage = pathname === "/sentiment";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -28,7 +31,7 @@ export default function App() {
   }, [theme]);
 
   useEffect(() => {
-    if (window.location.pathname === "/") {
+    if (pathname === "/") {
       window.history.replaceState(null, "", "/review");
     }
   }, []);
@@ -46,7 +49,7 @@ export default function App() {
         <nav className="nav-list" aria-label="Dashboard views">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = window.location.pathname === item.href;
+            const active = pathname === item.href;
             return item.enabled ? (
               <a
                 className={`nav-item ${active ? "nav-item--active" : ""}`}
