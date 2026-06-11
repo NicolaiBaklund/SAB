@@ -1,19 +1,26 @@
 import { BarChart3, Database, LineChart, RadioTower } from "lucide-react";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 
 import { ReviewPage } from "./pages/ReviewPage";
 import { getInitialTheme, storeTheme, type ThemeName } from "./theme";
 import { ThemeToggle } from "./components/ThemeToggle";
 
+// Lazy: SentimentPage pulls in the Plotly bundle (~1MB), which the other
+// pages shouldn't have to download.
+const SentimentPage = lazy(() =>
+  import("./pages/SentimentPage").then((module) => ({ default: module.SentimentPage })),
+);
+
 const navItems = [
   { label: "Review", href: "/review", icon: Database, enabled: true },
-  { label: "Sentiment", href: "/sentiment", icon: BarChart3, enabled: false },
+  { label: "Sentiment", href: "/sentiment", icon: BarChart3, enabled: true },
   { label: "Signals", href: "/signals", icon: RadioTower, enabled: false },
   { label: "Projections", href: "/projections", icon: LineChart, enabled: false },
 ];
 
 export default function App() {
   const [theme, setTheme] = useState<ThemeName>(() => getInitialTheme());
+  const isSentimentPage = window.location.pathname === "/sentiment";
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -62,14 +69,20 @@ export default function App() {
       <main className="main-panel">
         <header className="topbar">
           <div>
-            <h1>Article Review</h1>
+            <h1>{isSentimentPage ? "Sentiment" : "Article Review"}</h1>
           </div>
           <ThemeToggle
             theme={theme}
             onToggle={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
           />
         </header>
-        <ReviewPage />
+        {isSentimentPage ? (
+          <Suspense fallback={<div className="status">Loading</div>}>
+            <SentimentPage theme={theme} />
+          </Suspense>
+        ) : (
+          <ReviewPage />
+        )}
       </main>
     </div>
   );

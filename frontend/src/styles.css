@@ -592,6 +592,102 @@ a.nav-item:hover {
   background: color-mix(in srgb, var(--danger) 8%, var(--panel));
 }
 
+.sentiment-page {
+  display: grid;
+  gap: 16px;
+}
+
+.sentiment-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.toggle-button {
+  min-height: 34px;
+  padding: 0 14px;
+  border: 0;
+  background: var(--panel-raised);
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    background 150ms var(--ease),
+    color 150ms var(--ease);
+}
+
+.toggle-button--active {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.toggle-button:hover:not(.toggle-button--active) {
+  color: var(--text);
+}
+
+.company-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+}
+
+.company-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.company-checkbox input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.company-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
+.sentiment-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.chart-panel {
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-soft);
+}
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 16px;
+}
+
+.plotly-chart {
+  width: 100%;
+}
+
 @media (max-width: 1180px) {
   .search-field {
     grid-column: 1 / -1;
