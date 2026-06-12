@@ -155,3 +155,30 @@ and computing adjustment factors ourselves).
   browser-like one (the same workaround `yfinance` relies on).
 - **Failure isolation:** an unknown/delisted symbol returns a structured
   `chart.error` (HTTP 404) → logged warning for that company, run continues.
+
+### What this gives us — and what's still missing (toward Phase 3.2+)
+
+**Covered by the `prices` table:** everything classic technical analysis needs
+at a daily horizon — SMA/EMA, RSI, MACD, Bollinger, ATR (real high/low stored),
+volume features (OBV), daily returns and realized volatility. The 2-year
+backfill means even a 200-day SMA has a full year of usable values, and daily
+bars match the granularity of the sentiment series for the 1–5-day-lag
+correlation study (Phase 3.3).
+
+**Known gaps, in recommended priority order** (hold off until the Phase 3.2
+baseline shows they're needed):
+
+| Gap | Why it matters | Effort |
+|-----|----------------|--------|
+| Benchmark index (OSEBX) | Without it, a market-wide rally is indistinguishable from a company signal; relative/beta-adjusted returns are cleaner targets | ~free — same fetcher, e.g. an index entry using `price_symbol` |
+| Salmon spot price (Fish Pool Index) | The sector's dominant fundamental; explains much of the co-movement of all six tickers | small new scraper (weekly FPI) |
+| EUR/NOK | Salmon exports are EUR-priced, costs NOK; margin proxy | ~free — Yahoo serves `EURNOK=X` via the same API |
+| Earnings calendar (structured) | Highest-impact recurring events; Newsweb announcements only partially proxy it | medium |
+| Price sanity checks | Yahoo's Oslo daily data occasionally glitches (zero-volume days, bad ticks) | small — add to the Phase 3.2 analysis layer |
+
+**Honest constraint for the predictive model:** the binding limit is sample
+size, not features. The sentiment–price overlap is ~90 days x 6 tickers ≈ 540
+daily observations (~18 independent weekly windows), enough for correlation
+analysis and event studies but not for parameter-hungry ML. Phase 3.3/3.4
+should start with simple models (linear/logistic, event studies around
+announcements) and extend the news window before reaching for anything bigger.
