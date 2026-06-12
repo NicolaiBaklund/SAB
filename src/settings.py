@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # Ingestion: lookback window shared by both scrapers (roadmap "Time Scope")
     LOOKBACK_DAYS: int = 90
 
+    # Price backfill window (Phase 3.1). Deliberately longer than LOOKBACK_DAYS:
+    # the prices feed technical analysis, and long indicators (200-day SMA) need
+    # ~290 calendar days of history before their first value. Two years gives a
+    # full year of usable long-indicator values plus context across regimes.
+    PRICE_BACKFILL_DAYS: int = 730
+
     # Dashboard API: browser origins allowed to call it (JSON list in the env file,
     # e.g. CORS_ORIGINS=["https://sab.example.com"])
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]

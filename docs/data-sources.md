@@ -93,3 +93,92 @@ in native aggregator feeds (E24, DN/FA, …) — the rest of the pipeline is unc
   for off-topic items (Phase 2).
 - **Cross-source dedup** (the same event in Newsweb *and* here under different
   URLs) is intentionally **not** handled yet — see roadmap "known issues".
+
+---
+
+## Daily prices (OHLCV) — Phase 3.1
+
+**What it is:** Daily price bars (open/high/low/close/volume + dividend/split-adjusted close) per active company, for technical analysis (Phase 3.2+).
+**Scraper:** `src/data/prices.py` — `httpx` against the Yahoo Finance v8 chart JSON API, no SDK, no browser.
+**Endpoint:** `https://query1.finance.yahoo.com/v8/finance/chart/<SYMBOL>?period1=…&period2=…&interval=1d&includeAdjustedClose=true`
+**Symbols:** Oslo Børs listings carry the `.OL` suffix (`MOWI.OL`, `SALM.OL`, `LSG.OL`, `GSF.OL`, `BAKKA.OL`, `AUSS.OL`).
+
+### Source comparison (June 2026)
+
+The roadmap named "Yahoo Finance / Euronext" as candidates; the full field
+considered:
+
+| Source | Free, no key? | Oslo Børs OHLCV? | Adjusted close? | History depth | Verdict |
+|--------|---------------|------------------|-----------------|---------------|---------|
+| **Yahoo Finance v8 chart API** | yes | yes (`.OL` symbols) | yes (`adjclose` series) | decades | **chosen** |
+| Euronext (`live.euronext.com`) | yes | yes (official operator) | no | limited windows | undocumented POST endpoints keyed by ISIN+MIC, Cloudflare-fronted; no adjusted series — more brittle for no data advantage |
+| Stooq (CSV) | yes | **no** (US/PL/DE/UK/JP coverage) | partial | — | no Oslo coverage |
+| Alpha Vantage / Twelve Data / Marketstack / EODHD | API key | partial/paid | varies | varies | free tiers are heavily capped (e.g. 25 req/day) and Oslo coverage is paid or spotty |
+
+Yahoo wins on every axis that matters here and matches the project's existing
+pattern (Newsweb): a public JSON API the vendor's own site uses, called directly
+with `httpx`. The endpoint is **unofficial** — same standing as the Newsweb API —
+so it can change without notice; the fetcher is isolated in `src/data/prices.py`
+with mocked-transport tests, so breakage is easy to localize. If it dies,
+Euronext is the documented fallback (requires adding ISINs to `companies.json`
+and computing adjustment factors ourselves).
+
+> **Verification caveat:** this comparison was made from documented API
+> behaviour (the v8 chart API is also what the `yfinance` library uses); the
+> development sandbox had **no outbound network**, so per-symbol responses could
+> not be live-tested before merge. The first `--backfill` run on a normal
+> machine is the live test — per-symbol failures surface as warnings, not
+> crashes.
+
+### Behaviour
+
+- **Dynamic symbol mapping:** symbol = `<ticker>.OL` by default, overridable per
+  company via an optional `price_symbol` field in `companies.json` — adding or
+  deactivating a company needs no code change.
+- **Upsert, not insert:** bars are written with an upsert on `(ticker, date)`.
+  Two reasons: a bar fetched while the market is open is partial (`close` = last
+  trade so far), and `adj_close` is revised retroactively for the *whole history*
+  whenever a dividend/split lands. Incremental runs re-fetch a few days of tail
+  (`INCREMENTAL_OVERLAP_DAYS`), so recent revisions self-heal.
+- **`adj_close` staleness:** incremental runs only touch the tail, so after a
+  dividend the *older* stored `adj_close` values are stale until the next full
+  `--backfill` (which overwrites everything). Recommended: monthly `--backfill`
+  in the scheduler (see `setup.md`). Compute returns/indicators from `adj_close`;
+  `close` is what actually traded.
+- **Backfill window:** `PRICE_BACKFILL_DAYS` (default 730) — deliberately longer
+  than the 90-day news window because long technical indicators (200-day SMA)
+  need ~290 calendar days before their first value.
+- **Null bars** (halted days) come back as nulls in the parallel arrays and are
+  dropped; bar timestamps are converted to exchange-local trading days using the
+  `gmtoffset` from the response metadata.
+- **User-Agent:** Yahoo rejects obviously-scripted UAs, so the client sends a
+  browser-like one (the same workaround `yfinance` relies on).
+- **Failure isolation:** an unknown/delisted symbol returns a structured
+  `chart.error` (HTTP 404) → logged warning for that company, run continues.
+
+### What this gives us — and what's still missing (toward Phase 3.2+)
+
+**Covered by the `prices` table:** everything classic technical analysis needs
+at a daily horizon — SMA/EMA, RSI, MACD, Bollinger, ATR (real high/low stored),
+volume features (OBV), daily returns and realized volatility. The 2-year
+backfill means even a 200-day SMA has a full year of usable values, and daily
+bars match the granularity of the sentiment series for the 1–5-day-lag
+correlation study (Phase 3.3).
+
+**Known gaps, in recommended priority order** (hold off until the Phase 3.2
+baseline shows they're needed):
+
+| Gap | Why it matters | Effort |
+|-----|----------------|--------|
+| Benchmark index (OSEBX) | Without it, a market-wide rally is indistinguishable from a company signal; relative/beta-adjusted returns are cleaner targets | ~free — same fetcher, e.g. an index entry using `price_symbol` |
+| Salmon spot price (Fish Pool Index) | The sector's dominant fundamental; explains much of the co-movement of all six tickers | small new scraper (weekly FPI) |
+| EUR/NOK | Salmon exports are EUR-priced, costs NOK; margin proxy | ~free — Yahoo serves `EURNOK=X` via the same API |
+| Earnings calendar (structured) | Highest-impact recurring events; Newsweb announcements only partially proxy it | medium |
+| Price sanity checks | Yahoo's Oslo daily data occasionally glitches (zero-volume days, bad ticks) | small — add to the Phase 3.2 analysis layer |
+
+**Honest constraint for the predictive model:** the binding limit is sample
+size, not features. The sentiment–price overlap is ~90 days x 6 tickers ≈ 540
+daily observations (~18 independent weekly windows), enough for correlation
+analysis and event studies but not for parameter-hungry ML. Phase 3.3/3.4
+should start with simple models (linear/logistic, event studies around
+announcements) and extend the news window before reaching for anything bigger.
